@@ -16,6 +16,7 @@ import org.kodein.rest.nomi.Either
 import org.kodein.rest.nomi.Either.Companion.error
 import org.kodein.rest.nomi.Either.Companion.value
 import org.kodein.rest.nomi.Error
+import kotlin.coroutines.cancellation.CancellationException
 
 
 @InternalNomiAPI
@@ -47,6 +48,8 @@ public suspend inline fun <reified S, reified F : Error> HttpClient.call(
     }
     val response = try {
         statement.execute()
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Throwable) {
         throw EndpointNetworkException(e.message, e)
     }
