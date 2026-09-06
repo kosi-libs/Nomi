@@ -203,7 +203,9 @@ on the declaring interface, which overrides one on a parent interface.
 
 ### Wire protocol
 
-- A successful call answers `200 OK`, with the serialized `V` value as its body, or with no body at all when `V` is `Unit`.
+- A successful call answers `200 OK`, with the serialized `V` value as its body.
+- A successful call with nothing to return answers `204 No Content`, with no body — either because `V` is `Unit`,
+  or because `V` is nullable and the value is `null`.
 - A business failure answers `422 Unprocessable Entity`, with the serialized `E` error as its body.
   **`422` is reserved by Nomi**: `httpError` refuses it, and the client reads any other non-success status as an
   HTTP-level error rather than as a business failure.

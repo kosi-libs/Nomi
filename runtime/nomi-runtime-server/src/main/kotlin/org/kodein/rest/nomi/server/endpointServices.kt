@@ -44,8 +44,8 @@ public suspend inline fun <T : EndpointService, reified S, reified F : Error> Ro
         try {
             service.block()
                 .onValue { success ->
-                    if (success !is Unit) this@respond.respond(status = HttpStatusCode.OK, message = success, typeInfo<S>())
-                    else respond(HttpStatusCode.OK)
+                    if (success is Unit || success == null) respond(HttpStatusCode.NoContent)
+                    else this@respond.respond(status = HttpStatusCode.OK, message = success, typeInfo<S>())
                 }
                 .onError { failure ->
                     this@respond.respond(status = HttpStatusCode.UnprocessableEntity, message = failure, typeInfo<F>())
