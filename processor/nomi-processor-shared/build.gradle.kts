@@ -19,7 +19,7 @@ dependencies {
 
 mavenPublishing {
     pom {
-        name = "nomi-processor-client"
+        name = "nomi-processor-shared"
         description = "Nomi processor for generating shared code"
     }
 }

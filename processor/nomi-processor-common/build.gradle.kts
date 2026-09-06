@@ -16,7 +16,7 @@ dependencies {
 
 mavenPublishing {
     pom {
-        name = "nomi-processor-shared-analysis"
-        description = "Shared analysis utilities for Nomi processors"
+        name = "nomi-processor-common"
+        description = "Common analysis utilities for Nomi processors"
     }
 }

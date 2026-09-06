@@ -60,6 +60,6 @@ kotlin {
 mavenPublishing {
     pom {
         name = "nomi-runtime-shared"
-        description = "Nomi runtime shared between client and server"
+        description = "Nomi runtime for client applications"
     }
 }
