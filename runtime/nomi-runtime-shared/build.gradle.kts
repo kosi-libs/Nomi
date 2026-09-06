@@ -46,8 +46,6 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
-            implementation(libs.kotlinx.coroutines)
-            implementation(libs.ktor.http)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)

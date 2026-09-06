@@ -11,9 +11,7 @@ kotlin {
 dependencies {
     api(projects.runtime.nomiRuntimeShared)
     api(libs.ktor.server)
-//    implementation(libs.ktor.server.cio)
-//    implementation(libs.ktor.server.contentNegotiation)
-//    implementation(libs.ktor.serialization.json)
+    implementation(libs.kotlinx.coroutines)
 }
 
 mavenPublishing {
