@@ -22,10 +22,10 @@ import org.kodein.rpc.nomi.Error
 public sealed class EndpointException(message: String?, cause: Throwable? = null) : LightException(message, cause)
 
 @InternalNomiAPI
-public class EndpointStatusCodeException(public val code: HttpStatusCode, message: String?) : EndpointException(message)
+public class EndpointStatusCodeException(public val code: HttpStatusCode, public val body: String) : EndpointException(code.description)
 
 @InternalNomiAPI
-public class EndpointNetworkException(message: String?, cause: Throwable?) : EndpointException(message, cause)
+public class EndpointNetworkException(message: String?, override val cause: Throwable) : EndpointException(message, cause)
 
 @InternalNomiAPI
 public interface NomiClientEndpointService : EndpointService {

@@ -4,7 +4,7 @@ import io.ktor.client.*
 import io.ktor.client.plugins.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.serialization.kotlinx.json.*
-import org.kodein.rest.nomi.client.execute
+import org.kodein.rest.nomi.client.call
 import org.kodein.rest.nomi.demo.shared.Articles
 import org.kodein.rest.nomi.demo.shared.SharedJson
 
@@ -21,6 +21,6 @@ suspend fun main() {
     }
 
     println("Articles")
-    val result = APIServices.articles(client).execute { Articles().get() }
+    val result = APIServices.articles(client).call { Articles().get() }
     println(result)
 }

@@ -2,6 +2,7 @@ package org.kodein.rest.nomi.client
 
 import io.ktor.client.*
 import io.ktor.client.request.*
+import io.ktor.http.HttpStatusCode
 import org.kodein.rest.nomi.EndpointService
 import org.kodein.rest.nomi.InternalNomiAPI
 import org.kodein.rest.nomi.client.ServiceCaller.CallBuilder
@@ -15,7 +16,7 @@ public interface ServiceCaller<T : EndpointService> {
     public interface CallBuilder {
         public fun buildRequest(block: HttpRequestBuilder.() -> Unit)
     }
-    public suspend fun <S, F : Error> execute(
+    public suspend fun <S, F : Error> call(
         successClass: KClass<S & Any>,
         failureClass: KClass<F>,
         call: suspend context(CallBuilder) T.() -> Either<S, F>
@@ -38,25 +39,31 @@ public class NomiServiceCaller<T : EndpointService>(
         }
     }
 
-    override suspend fun <S, F : Error> execute(
+    override suspend fun <S, F : Error> call(
         successClass: KClass<S & Any>,
         failureClass: KClass<F>,
         call: suspend context(CallBuilder) T.() -> Either<S, F>
     ): CallStatus.Result<S, F> {
         val callBuilder = CallBuilderImpl()
 
-        return call(callBuilder, service(client) { callBuilder.execute(this) })
-            .on(
-                valueClass = successClass,
-                errorClass = failureClass,
-                value = { CallStatus.Success(it) },
-                error = { CallStatus.CallFailure(it) }
-            )
+        try {
+            return call(callBuilder, service(client) { callBuilder.execute(this) })
+                .on(
+                    valueClass = successClass,
+                    errorClass = failureClass,
+                    value = { CallStatus.Success(it) },
+                    error = { CallStatus.CallFailure(it) }
+                )
+        } catch (e: EndpointStatusCodeException) {
+            return CallStatus.ServerFailure(e.code, e.body)
+        } catch (e: EndpointNetworkException) {
+            return CallStatus.NetworkFailure(e.message ?: "", e.cause)
+        }
     }
 
 }
 
-public suspend inline fun <T : EndpointService, reified S : Any, reified F : Error> ServiceCaller<T>.execute(
+public suspend inline fun <T : EndpointService, reified S : Any, reified F : Error> ServiceCaller<T>.call(
     noinline call: suspend context(CallBuilder) T.() -> Either<S, F>
 ): CallStatus.Result<S, F> =
-    execute(S::class, F::class, call)
+    call(S::class, F::class, call)

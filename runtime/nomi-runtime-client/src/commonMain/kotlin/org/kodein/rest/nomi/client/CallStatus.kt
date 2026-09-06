@@ -20,12 +20,9 @@ public sealed interface CallStatus<out S, out F : Error> {
     public data class Success<out S, out F : Error>(val success: S) : Result<S, F>, NotFailure<S, F>
     public sealed interface Failure<out S, out F : Error> : Result<S, F>, NotSuccess<S, F>
 
-    public data object NetworkFailure : Failure<Any?, Error> {
-        public operator fun <S, F : Error> invoke(): Failure<S, F> =
-            @Suppress("UNCHECKED_CAST") (this as Failure<S, F>)
-    }
+    public data class NetworkFailure<out S, out F : Error>(val message: String, val cause: Throwable? = null) : Failure<S, F>
 
-    public data class ServerFailure<out S, out F : Error>(val code: HttpStatusCode) : Failure<S, F>
+    public data class ServerFailure<out S, out F : Error>(val code: HttpStatusCode, val body: String) : Failure<S, F>
     public data class CallFailure<out S, out F : Error>(val failure: F) : Failure<S, F>
 
     public companion object {
