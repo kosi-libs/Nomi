@@ -10,7 +10,7 @@ kotlin {
 
 dependencies {
     api(projects.runtime.nomiRuntimeShared)
-    implementation(libs.ktor.server)
+    api(libs.ktor.server)
 //    implementation(libs.ktor.server.cio)
 //    implementation(libs.ktor.server.contentNegotiation)
 //    implementation(libs.ktor.serialization.json)
