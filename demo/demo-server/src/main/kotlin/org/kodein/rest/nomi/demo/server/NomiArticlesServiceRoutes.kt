@@ -61,7 +61,7 @@ fun Route.service(service: ServerArticlesService) {
                     NomiArticleComments(
                         articleId = decode(UuidStringer, call.parameters["articleId"]!!)
                     )
-                        .get()
+                        .get(page = decodeOrNull(IntStringer, call.queryParameters["page"]))
                 }
             }
             post {
