@@ -34,7 +34,6 @@ public annotation class Endpoint(val method: Method) {
 
     @Retention(AnnotationRetention.BINARY)
     @Target(AnnotationTarget.PROPERTY, AnnotationTarget.VALUE_PARAMETER)
-    @Repeatable
     public annotation class Stringed(val with: KClass<out Stringer<*>>)
 }
 

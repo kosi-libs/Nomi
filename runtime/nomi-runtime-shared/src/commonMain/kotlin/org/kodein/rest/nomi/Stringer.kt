@@ -8,26 +8,26 @@ public interface Stringer<T> {
     public class Failure(public val reason: String) : Error
 
     public fun encode(value: T): String
-    public fun decode(url: String): Either<T, Failure>
+    public fun decode(segment: String): Either<T, Failure>
 
     public object Builtins {
 
         public object BooleanStringer : Stringer<Boolean> {
             override fun encode(value: Boolean): String = if (value) "1" else "0"
-            override fun decode(url: String): Either<Boolean, Failure> =
-                value(url == "1" || url.lowercase() == "true")
+            override fun decode(segment: String): Either<Boolean, Failure> =
+                value(segment == "1" || segment.lowercase() == "true")
         }
 
         public object IntStringer : Stringer<Int> {
             override fun encode(value: Int): String = value.toString()
-            override fun decode(url: String): Either<Int, Failure> =
-                url.toIntOrNull()?.let { value(it) } ?: error(Failure("Invalid integer number"))
+            override fun decode(segment: String): Either<Int, Failure> =
+                segment.toIntOrNull()?.let { value(it) } ?: error(Failure("Invalid integer number"))
         }
 
         public object LongStringer : Stringer<Long> {
             override fun encode(value: Long): String = value.toString()
-            override fun decode(url: String): Either<Long, Failure> =
-                url.toLongOrNull()?.let { value(it) } ?: error(Failure("Invalid long integer number"))
+            override fun decode(segment: String): Either<Long, Failure> =
+                segment.toLongOrNull()?.let { value(it) } ?: error(Failure("Invalid long integer number"))
         }
 
     }
