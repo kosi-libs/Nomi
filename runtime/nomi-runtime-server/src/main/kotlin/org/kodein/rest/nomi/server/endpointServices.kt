@@ -1,20 +1,20 @@
 package org.kodein.rest.nomi.server
 
 import io.ktor.http.*
-import io.ktor.server.response.respond
+import io.ktor.server.response.*
 import io.ktor.server.routing.*
-import io.ktor.util.reflect.typeInfo
+import io.ktor.util.reflect.*
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.withContext
+import org.kodein.rest.nomi.Either
 import org.kodein.rest.nomi.EndpointService
+import org.kodein.rest.nomi.Error
 import org.kodein.rest.nomi.InternalNomiAPI
 import org.kodein.rest.nomi.LightException
 import org.kodein.rest.nomi.Stringer
-import org.kodein.rpc.nomi.Either
-import org.kodein.rpc.nomi.Error
-import org.kodein.rpc.nomi.onError
-import org.kodein.rpc.nomi.onValue
-import org.kodein.rpc.nomi.valueOr
+import org.kodein.rest.nomi.onError
+import org.kodein.rest.nomi.onValue
+import org.kodein.rest.nomi.valueOr
 import kotlin.coroutines.CoroutineContext
 
 

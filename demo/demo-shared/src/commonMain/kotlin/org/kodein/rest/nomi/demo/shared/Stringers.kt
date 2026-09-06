@@ -3,8 +3,8 @@ package org.kodein.rest.nomi.demo.shared
 import org.kodein.rest.nomi.Endpoint
 import org.kodein.rest.nomi.Stringer
 import org.kodein.rest.nomi.Stringer.Failure
-import org.kodein.rpc.nomi.Either
-import org.kodein.rpc.nomi.Either.Companion.value
+import org.kodein.rest.nomi.Either
+import org.kodein.rest.nomi.Either.Companion.value
 import kotlin.uuid.Uuid
 
 

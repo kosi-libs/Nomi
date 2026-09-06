@@ -1,9 +1,9 @@
 @file:Suppress("unused")
 
-package org.kodein.rpc.nomi
+package org.kodein.rest.nomi
 
-import org.kodein.rpc.nomi.Either.Companion.error
-import org.kodein.rpc.nomi.Either.Companion.value
+import org.kodein.rest.nomi.Either.Companion.error
+import org.kodein.rest.nomi.Either.Companion.value
 import kotlin.jvm.JvmInline
 import kotlin.reflect.KClass
 import kotlin.reflect.safeCast

@@ -11,11 +11,11 @@ import org.kodein.rest.nomi.demo.shared.Articles
 import org.kodein.rest.nomi.demo.shared.ArticlesService
 import org.kodein.rest.nomi.server.ServerEndpointService
 import org.kodein.rest.nomi.server.httpError
-import org.kodein.rpc.nomi.Either
-import org.kodein.rpc.nomi.Either.Companion.error
-import org.kodein.rpc.nomi.Either.Companion.unit
-import org.kodein.rpc.nomi.Either.Companion.value
-import org.kodein.rpc.nomi.NoFail
+import org.kodein.rest.nomi.Either
+import org.kodein.rest.nomi.Either.Companion.error
+import org.kodein.rest.nomi.Either.Companion.unit
+import org.kodein.rest.nomi.Either.Companion.value
+import org.kodein.rest.nomi.NoFail
 import kotlin.uuid.Uuid
 
 

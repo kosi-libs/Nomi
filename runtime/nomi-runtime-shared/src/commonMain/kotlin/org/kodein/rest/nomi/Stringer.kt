@@ -1,9 +1,7 @@
 package org.kodein.rest.nomi
 
-import org.kodein.rpc.nomi.Either
-import org.kodein.rpc.nomi.Either.Companion.error
-import org.kodein.rpc.nomi.Either.Companion.value
-import org.kodein.rpc.nomi.Error
+import org.kodein.rest.nomi.Either.Companion.error
+import org.kodein.rest.nomi.Either.Companion.value
 
 
 public interface Stringer<T> {

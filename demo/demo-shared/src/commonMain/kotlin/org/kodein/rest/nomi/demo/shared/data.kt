@@ -1,7 +1,7 @@
 package org.kodein.rest.nomi.demo.shared
 
 import kotlinx.serialization.Serializable
-import org.kodein.rpc.nomi.Error
+import org.kodein.rest.nomi.Error
 import kotlin.uuid.Uuid
 
 

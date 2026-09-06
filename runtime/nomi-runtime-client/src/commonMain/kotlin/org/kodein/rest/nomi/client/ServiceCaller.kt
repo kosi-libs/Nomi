@@ -5,9 +5,9 @@ import io.ktor.client.request.*
 import org.kodein.rest.nomi.EndpointService
 import org.kodein.rest.nomi.InternalNomiAPI
 import org.kodein.rest.nomi.client.ServiceCaller.CallBuilder
-import org.kodein.rpc.nomi.Either
-import org.kodein.rpc.nomi.Error
-import org.kodein.rpc.nomi.on
+import org.kodein.rest.nomi.Either
+import org.kodein.rest.nomi.Error
+import org.kodein.rest.nomi.on
 import kotlin.reflect.KClass
 
 

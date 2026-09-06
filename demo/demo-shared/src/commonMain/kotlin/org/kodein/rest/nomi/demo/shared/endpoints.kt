@@ -2,8 +2,8 @@ package org.kodein.rest.nomi.demo.shared
 
 import org.kodein.rest.nomi.Endpoint
 import org.kodein.rest.nomi.EndpointService
-import org.kodein.rpc.nomi.Either
-import org.kodein.rpc.nomi.NoFail
+import org.kodein.rest.nomi.Either
+import org.kodein.rest.nomi.NoFail
 import kotlin.uuid.Uuid
 
 

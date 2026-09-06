@@ -1,9 +1,9 @@
 package org.kodein.rest.nomi.client
 
 import io.ktor.http.*
-import org.kodein.rpc.nomi.Error
-import org.kodein.rpc.nomi.NoFail
-import org.kodein.rpc.nomi.isImpossible
+import org.kodein.rest.nomi.Error
+import org.kodein.rest.nomi.NoFail
+import org.kodein.rest.nomi.isImpossible
 
 
 // Will be advantageously replaced by Union for Errors: https://youtrack.jetbrains.com/issue/KT-68296/Union-Types-for-Errors

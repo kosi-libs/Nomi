@@ -12,10 +12,10 @@ import org.kodein.rest.nomi.EndpointService
 import org.kodein.rest.nomi.InternalNomiAPI
 import org.kodein.rest.nomi.LightException
 import org.kodein.rest.nomi.Stringer
-import org.kodein.rpc.nomi.Either
-import org.kodein.rpc.nomi.Either.Companion.error
-import org.kodein.rpc.nomi.Either.Companion.value
-import org.kodein.rpc.nomi.Error
+import org.kodein.rest.nomi.Either
+import org.kodein.rest.nomi.Either.Companion.error
+import org.kodein.rest.nomi.Either.Companion.value
+import org.kodein.rest.nomi.Error
 
 
 @InternalNomiAPI
