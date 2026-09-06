@@ -69,8 +69,8 @@ public fun <S, F : Error> CallStatus.NotSuccess<*, F>.fakeSuccess(): CallStatus.
 public fun <S, F : Error> CallStatus.Failure<*, F>.fakeSuccess(): CallStatus.Failure<S, F> =
     @Suppress("UNCHECKED_CAST") (this as CallStatus.Failure<S, F>)
 
-public fun <S, F : Error> CallStatus.NotFailure<S, *>.fakeFailure(): CallStatus<S, F> =
-    @Suppress("UNCHECKED_CAST") (this as CallStatus.Success<S, F>)
+public fun <S, F : Error> CallStatus.NotFailure<S, *>.fakeFailure(): CallStatus.NotFailure<S, F> =
+    @Suppress("UNCHECKED_CAST") (this as CallStatus.NotFailure<S, F>)
 
 public fun <S, F : Error> CallStatus.NotSuccess<*, NoFail>.fake(): CallStatus.NotSuccess<S, F> =
     fakeSuccess<S, NoFail>().fakeFailure<S, F>() as CallStatus.NotSuccess<S, F>
