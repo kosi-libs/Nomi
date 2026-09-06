@@ -15,7 +15,11 @@ public interface Stringer<T> {
         public object BooleanStringer : Stringer<Boolean> {
             override fun encode(value: Boolean): String = if (value) "1" else "0"
             override fun decode(segment: String): Either<Boolean, Failure> =
-                value(segment == "1" || segment.lowercase() == "true")
+                when (segment) {
+                    "1", "true" -> value(true)
+                    "0", "false" -> value(false)
+                    else -> error(Failure("Invalid boolean"))
+                }
         }
 
         public object IntStringer : Stringer<Int> {
