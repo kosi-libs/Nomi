@@ -27,13 +27,13 @@ data class ArticleComment(
 
 @Serializable
 sealed interface ArticleCreationFailure : Error {
-    data object InvalidTitle : ArticleCreationFailure
-    data object InvalidAuthor : ArticleCreationFailure
-    data object InvalidContent : ArticleCreationFailure
+    @Serializable data object InvalidTitle : ArticleCreationFailure
+    @Serializable data object InvalidAuthor : ArticleCreationFailure
+    @Serializable data object InvalidContent : ArticleCreationFailure
 }
 
 @Serializable
 sealed interface ArticleCommentFailure : Error {
-    data object InvalidAuthor : ArticleCommentFailure
-    data object InvalidContent : ArticleCommentFailure
+    @Serializable data object InvalidAuthor : ArticleCommentFailure
+    @Serializable data object InvalidContent : ArticleCommentFailure
 }
