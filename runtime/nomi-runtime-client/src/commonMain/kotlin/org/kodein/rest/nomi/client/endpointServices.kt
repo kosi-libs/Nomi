@@ -40,7 +40,7 @@ public suspend inline fun <reified S, reified F : Error> HttpClient.call(
     buildRequest: HttpRequestBuilder.() -> Unit = {}
 ): Either<S, F> {
     val statement = prepareRequest {
-        url.pathSegments = pathSegments
+        url.pathSegments += pathSegments
         this.method = method
         buildRequest(this)
         service.buildRequest(this)

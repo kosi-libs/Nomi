@@ -5,7 +5,6 @@ import io.ktor.client.request.*
 import io.ktor.http.HttpMethod.Companion.Delete
 import io.ktor.http.HttpMethod.Companion.Get
 import io.ktor.http.HttpMethod.Companion.Post
-import io.ktor.http.encodeURLPathPart
 import org.kodein.rest.nomi.InternalNomiAPI
 import org.kodein.rest.nomi.Stringer.Builtins.IntStringer
 import org.kodein.rest.nomi.client.NomiClientEndpointService
