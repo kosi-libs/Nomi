@@ -1,0 +1,71 @@
+package org.kodein.rest.nomi.server
+
+import io.ktor.http.*
+import io.ktor.server.response.respond
+import io.ktor.server.routing.*
+import io.ktor.util.reflect.typeInfo
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.withContext
+import org.kodein.rest.nomi.EndpointService
+import org.kodein.rest.nomi.InternalNomiAPI
+import org.kodein.rest.nomi.LightException
+import org.kodein.rest.nomi.Stringer
+import org.kodein.rpc.nomi.Either
+import org.kodein.rpc.nomi.Error
+import org.kodein.rpc.nomi.onError
+import org.kodein.rpc.nomi.onValue
+import org.kodein.rpc.nomi.valueOr
+import kotlin.coroutines.CoroutineContext
+
+
+@PublishedApi
+internal class EndpointStatusCodeException(val code: HttpStatusCode, message: String?) : LightException(message)
+
+context(_: EndpointService)
+public fun httpError(code: HttpStatusCode, message: String? = null): Nothing {
+    require(code != HttpStatusCode.UnprocessableEntity) { "Cannot use UnprocessableEntity as an error code as it is reserved by Nomi." }
+    throw EndpointStatusCodeException(code, message)
+}
+
+@PublishedApi
+internal class RoutingCallElement(val call: RoutingCall) : CoroutineContext.Element {
+    override val key: CoroutineContext.Key<*> = Key
+    companion object Key : CoroutineContext.Key<RoutingCallElement>
+}
+
+context(_: EndpointService)
+public suspend fun routingCall(): RoutingCall =
+    currentCoroutineContext()[RoutingCallElement]?.call
+        ?: error("No RoutingCall in coroutineContext")
+
+@InternalNomiAPI
+public suspend inline fun <T : EndpointService, reified S, reified F : Error> RoutingCall.respond(service: T, noinline block: suspend T.() -> Either<S, F>) {
+    withContext(RoutingCallElement(this)) {
+        try {
+            service.block()
+                .onValue { success ->
+                    if (success !is Unit) this@respond.respond(status = HttpStatusCode.OK, message = success, typeInfo<S>())
+                    else respond(HttpStatusCode.OK)
+                }
+                .onError { failure ->
+                    this@respond.respond(status = HttpStatusCode.UnprocessableEntity, message = failure, typeInfo<F>())
+                }
+        } catch (e: EndpointStatusCodeException) {
+            if (e.message == null) respond(e.code)
+            else respond(e.code, e.message!!)
+        }
+    }
+}
+
+@InternalNomiAPI
+context(_: EndpointService)
+public inline fun <reified T> decodeOrNull(stringifyer: Stringer<T>, url: String?): T? {
+    if (url == null) return null
+    return decode(stringifyer, url)
+}
+
+@InternalNomiAPI
+context(_: EndpointService)
+public inline fun <reified T> decode(stringifyer: Stringer<T>, url: String): T {
+    return stringifyer.decode(url).valueOr { httpError(HttpStatusCode.BadRequest, it.reason) }
+}
