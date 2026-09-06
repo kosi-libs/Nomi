@@ -2,7 +2,6 @@ package org.kodein.rest.nomi.client
 
 import io.ktor.client.*
 import io.ktor.client.request.*
-import io.ktor.http.HttpStatusCode
 import org.kodein.rest.nomi.EndpointService
 import org.kodein.rest.nomi.InternalNomiAPI
 import org.kodein.rest.nomi.client.ServiceCaller.CallBuilder
