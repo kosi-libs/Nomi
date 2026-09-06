@@ -1,7 +1,6 @@
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.kotlin.plugin.serialization)
-    alias(libs.plugins.mavenPublish)
 }
 
 kotlin {
@@ -54,12 +53,5 @@ kotlin {
             implementation(libs.kotlin.test)
             implementation(libs.kotlinx.coroutines.test)
         }
-    }
-}
-
-mavenPublishing {
-    pom {
-        name = "nomi-runtime-shared"
-        description = "Nomi runtime shared between client and server"
     }
 }
