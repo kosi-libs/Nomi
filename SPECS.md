@@ -443,21 +443,24 @@ The generated extension function returns a `ServiceCaller`, which runs one call 
 ```kotlin
 val users = APIServices.users(client)
 
-val result = users.execute { Users().get(page = 0) }
+val result = users.call { Users().get(page = 0) }
 ```
 
-The `execute` block runs with the service as its receiver, so that resource factories and endpoint methods are in
+The `call` block runs with the service as its receiver, so that resource factories and endpoint methods are in
 scope. It also runs with a `ServiceCaller.CallBuilder` context, whose `buildRequest { }` configures the underlying
 ktor request (headers, authentication…) for that call.
 
 `CallStatus.Result` is one of:
 - `Success(value)`: the endpoint answered `200 OK`.
 - `CallFailure(error)`: the endpoint answered `422 Unprocessable Entity` with a business failure.
-- `ServerFailure(code)`: the server answered any other non-success status.
-- `NetworkFailure`: the request never reached the server.
+- `ServerFailure(code, body)`: the server answered any other non-success status.
+- `NetworkFailure(message, cause)`: the request never reached the server.
 
-`ServiceCaller.execute` is responsible for that mapping: `client.call` raises `EndpointStatusCodeException` and
-`EndpointNetworkException`, which `execute` catches and turns into `ServerFailure` and `NetworkFailure` respectively.
-No Nomi exception ever escapes `execute`.
+`ServiceCaller.call` is responsible for that mapping: `client.call` raises `EndpointStatusCodeException` and
+`EndpointNetworkException`, which `ServiceCaller.call` catches and turns into `ServerFailure` and `NetworkFailure`
+respectively. No Nomi exception ever escapes it.
+
+Coroutine cancellation is not an outcome and must never be reported as one: a `CancellationException` raised while a
+call is in flight propagates to the caller unchanged, rather than being reported as a `NetworkFailure`.
 
 `CallStatus` additionally carries a `Loading` state, so that the same type can model a call still in flight in a UI.
