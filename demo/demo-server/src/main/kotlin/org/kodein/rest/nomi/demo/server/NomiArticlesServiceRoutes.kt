@@ -46,13 +46,13 @@ fun Route.service(service: ServerArticlesService) {
                 )
                     .get()
             }
-            delete {
-                call.respond(service) {
-                    NomiArticle(
-                        articleId = decode(UuidStringer, call.parameters["articleId"]!!)
-                    )
-                        .delete()
-                }
+        }
+        delete {
+            call.respond(service) {
+                NomiArticle(
+                    articleId = decode(UuidStringer, call.parameters["articleId"]!!)
+                )
+                    .delete()
             }
         }
         route("/comments") {
