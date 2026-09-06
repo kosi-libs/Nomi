@@ -134,8 +134,16 @@ defines the following endpoints:
 
 All resource path parameters and all service endpoint query arguments must be converted to `String` by the client, and parsed by the server.
 That is the role of the `Stringer` interface.
+
+A parameter that is already a `String` needs no `Stringer`: the client passes its value through unchanged, and the
+server hands the received value back as it stands. There is deliberately no built-in `Stringer` for `String`, and
+declaring one for it — with `@Endpoint.Stringed` or `@Endpoint.UseStringer` — is an error.
+Escaping is not a `Stringer`'s concern in either case: the runtime percent-encodes every path segment and query value
+on its way out and decodes it on the way back in, so a `Stringer` always encodes to, and decodes from, the *unescaped*
+text. A `Stringer` that escapes its own output would have that output escaped a second time.
+
 Built-in Stringers are provided for `Boolean`, `Int` and `Long`.
-For any other type, the user must provide a `Stringer` for the specific type.
+For any other non-`String` type, the user must provide a `Stringer` for the specific type.
 To do so, the user must first create an object that implements the `Stringer` interface (it must be an `object`, neither a `class` nor an `interface` are valid).
 Then, the user must associate the `Stringer` with the type it is used for.
 The processor verifies that the registered object does implement `Stringer<T>` for the type it is registered for.
