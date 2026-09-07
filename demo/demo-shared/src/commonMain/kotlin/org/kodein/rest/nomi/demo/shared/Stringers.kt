@@ -10,8 +10,8 @@ import kotlin.uuid.Uuid
 
 object UuidStringer : Stringer<Uuid> {
     override fun encode(value: Uuid): String = value.toString()
-    override fun decode(segment: String): Either<Uuid, Failure> =
-        Uuid.parseOrNull(segment)?.let { value(it) } ?: Either.Companion.error(Failure("Invalid UUID"))
+    override fun decode(encoded: String): Either<Uuid, Failure> =
+        Uuid.parseOrNull(encoded)?.let { value(it) } ?: Either.Companion.error(Failure("Invalid UUID"))
 }
 
 @Endpoint.UseStringer(Uuid::class, UuidStringer::class)

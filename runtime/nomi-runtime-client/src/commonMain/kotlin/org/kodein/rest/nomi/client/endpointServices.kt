@@ -63,7 +63,7 @@ context(_: NomiClientEndpointService)
 public fun <T> HttpRequestBuilder.appendParameter(
     name: String,
     value: T? = null,
-    urlizer: Stringer<T>
+    stringer: Stringer<T>
 ) {
-    if (value != null) url.parameters.append(name, urlizer.encode(value))
+    if (value != null) url.parameters.append(name, stringer.encode(value))
 }

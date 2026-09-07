@@ -59,13 +59,13 @@ public suspend inline fun <T : EndpointService, reified S, reified F : Error> Ro
 
 @InternalNomiAPI
 context(_: EndpointService)
-public inline fun <reified T> decodeOrNull(stringifyer: Stringer<T>, url: String?): T? {
-    if (url == null) return null
-    return decode(stringifyer, url)
+public inline fun <reified T> decodeOrNull(stringer: Stringer<T>, encoded: String?): T? {
+    if (encoded == null) return null
+    return decode(stringer, encoded)
 }
 
 @InternalNomiAPI
 context(_: EndpointService)
-public inline fun <reified T> decode(stringifyer: Stringer<T>, url: String): T {
-    return stringifyer.decode(url).valueOr { httpError(HttpStatusCode.BadRequest, it.reason) }
+public inline fun <reified T> decode(stringer: Stringer<T>, encoded: String): T {
+    return stringer.decode(encoded).valueOr { httpError(HttpStatusCode.BadRequest, it.reason) }
 }
