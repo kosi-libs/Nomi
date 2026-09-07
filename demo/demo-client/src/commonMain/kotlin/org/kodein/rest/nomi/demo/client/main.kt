@@ -3,6 +3,8 @@ package org.kodein.rest.nomi.demo.client
 import io.ktor.client.*
 import io.ktor.client.plugins.*
 import io.ktor.client.plugins.contentnegotiation.*
+import io.ktor.http.ContentType
+import io.ktor.http.contentType
 import io.ktor.serialization.kotlinx.json.*
 import org.kodein.rest.nomi.client.call
 import org.kodein.rest.nomi.demo.shared.Articles
@@ -17,6 +19,7 @@ suspend fun main() {
         }
         defaultRequest {
             url("http://localhost:8080")
+            contentType(ContentType.Application.Json)
         }
     }
 
