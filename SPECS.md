@@ -477,15 +477,24 @@ val client = HttpClient {
 }
 ```
 
-- **`ContentNegotiation`, with the same format the server registered.** Without it nothing can be serialized.
+- **`ContentNegotiation`, with the same format the server registered.** Without it nothing can be serialized: a
+  request carrying a body fails while being prepared, and a response body fails to be read.
 - **A base URL, in `defaultRequest`.** A call contributes only its own path segments, which are appended to this one.
   *The base URL must end in a slash* if it carries a path: this is ordinary URL resolution, so
   `https://api.example.com/v1` treats `v1` as a resource to be replaced and the prefix is silently lost, whereas
   `https://api.example.com/v1/` keeps it.
 - **A `Content-Type`, in `defaultRequest`.** `ContentNegotiation` chooses its converter from the request's content
-  type, so with none set it cannot serialize a request body: every `post`, `put` and `patch` fails before reaching
-  the network, and — because the failure happens while preparing the request — it surfaces as a `NetworkFailure`,
-  which names neither the cause nor the fix.
+  type, so with none set it cannot serialize a request body, and every `post`, `put` and `patch` fails before
+  reaching the network.
+
+Get any of this wrong and the call **throws**, rather than returning a `CallStatus`. A misconfigured client is a
+programming error, not a call outcome, so Nomi lets ktor's own exception through with its own diagnostic rather than
+flattening it into a `NetworkFailure` that would be indistinguishable from a server being down:
+
+| Mistake | What is raised |
+| --- | --- |
+| No `ContentNegotiation`, or no `Content-Type`, on a request with a body | `IllegalStateException`, from ktor: _"Fail to prepare request body for sending… with Content-Type: null"_ |
+| No `ContentNegotiation`, or a format the response does not match, when reading a response body | `NoTransformationFoundException`, from ktor: _"Expected response body of the type … but was …"_ |
 
 Anything else the calls need — authentication, logging, timeouts, an engine — is configured on the same client, or
 per call through `buildRequest` below.
@@ -510,9 +519,17 @@ ktor request (headers, authentication…) for that call.
 
 `ServiceCaller.call` is responsible for that mapping: `client.call` raises `EndpointStatusCodeException` and
 `EndpointNetworkException`, which `ServiceCaller.call` catches and turns into `ServerFailure` and `NetworkFailure`
-respectively. No Nomi exception ever escapes it.
+respectively. No Nomi exception ever escapes it — but not everything raised during a call is a Nomi exception.
 
-Coroutine cancellation is not an outcome and must never be reported as one: a `CancellationException` raised while a
-call is in flight propagates to the caller unchanged, rather than being reported as a `NetworkFailure`.
+A `CallStatus` describes how a call *went*, so only things that can happen to a well-formed call are reported that
+way. Two kinds of throwable are deliberately let through instead:
+
+- **Coroutine cancellation.** A `CancellationException` raised while a call is in flight propagates to the caller
+  unchanged. Reporting it as a `NetworkFailure` would let the caller carry on after its scope had been cancelled.
+- **Configuration errors.** The exceptions in the client-configuration table above propagate unchanged too. They say
+  the client was built wrong, which no amount of retrying or error handling will fix, and their own messages name the
+  cause precisely — something a `NetworkFailure` could not do.
+
+Everything else that goes wrong during a call becomes a `CallStatus.Result`.
 
 `CallStatus` additionally carries a `Loading` state, so that the same type can model a call still in flight in a UI.

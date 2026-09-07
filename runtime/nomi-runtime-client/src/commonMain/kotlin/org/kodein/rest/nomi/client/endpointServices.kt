@@ -58,6 +58,8 @@ internal suspend fun <S, F : Error> HttpClient.call(
         statement.execute()
     } catch (e: CancellationException) {
         throw e
+    } catch (e: IllegalStateException) {
+        throw e
     } catch (e: Throwable) {
         throw EndpointNetworkException(e.message, e)
     }
