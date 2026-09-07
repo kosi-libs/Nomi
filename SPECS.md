@@ -99,8 +99,9 @@ Two endpoints of the same service may not resolve to the same (path, HTTP method
 
 Note: Standard HTTP errors (404 not found, 403 forbidden) should not be represented as "business failures".
 A business failure is when the endpoint call failed for a business reason, not a resource reason (for example, because the client tried to create a user without a name).
-A business failure type must be `@Serializable` — and, when it is a sealed hierarchy, every one of its members must be
-`@Serializable` too, otherwise it cannot be serialized polymorphically.
+A business failure type must be serializable by whichever converter the application registered (see "Wire protocol"
+below). With kotlinx.serialization that means `@Serializable` — and, when the type is a sealed hierarchy, every one of
+its members must carry `@Serializable` too, or it cannot be serialized polymorphically.
 
 For example, the current code:
 
@@ -210,6 +211,16 @@ The nearest declaration wins: `@Endpoint.Stringed` on the property or parameter 
 on the declaring interface, which overrides one on a parent interface.
 
 ### Wire protocol
+
+Nomi defines the *shape* of a call — its method, its path, its query parameters, its status code, and whether a body
+is present — and nothing about the *format* of that body.
+Serialization is deliberately outside the scope of the library: Nomi never picks a media type, never registers a
+converter, and never reads or writes a body itself. It hands the value to ktor and lets ktor's `ContentNegotiation`
+plugin serialize it.
+
+Choosing the format, and configuring it identically on both sides, is therefore the user's responsibility — JSON,
+CBOR, ProtoBuf, or anything else ktor can negotiate. The examples throughout this document use JSON because the demo
+does; nothing in Nomi assumes it.
 
 - A successful call answers `200 OK`, with the serialized `V` value as its body.
 - A successful call with nothing to return answers `204 No Content`, with no body — either because `V` is `Unit`,
@@ -387,6 +398,10 @@ embeddedServer(
 }.start(wait = true)
 ```
 
+`ContentNegotiation` is not optional: without a converter registered for the format the client sends, the server
+cannot read a request body and cannot serialize a response. The `json(SharedJson)` above is the demo's choice —
+substitute `cbor(…)` or any other ktor converter, as long as the client is configured to match.
+
 ### Client processor
 
 For each `@ClientEndpointServiceFactory` annotated object, the client processor generates, in the same package:
@@ -447,8 +462,35 @@ the concatenation of that literal text and the encoded parameter, in a single pa
 
 #### Usage
 
-The generated extension function returns a `ServiceCaller`, which runs one call and reports its outcome as a
-`CallStatus.Result`:
+The generated extension function takes the `HttpClient` the calls will run on. Nomi does not create or configure that
+client, so the application must set up three things on it:
+
+```kotlin
+val client = HttpClient {
+    install(ContentNegotiation) {
+        json(SharedJson)
+    }
+    defaultRequest {
+        url("https://api.example.com/")
+        contentType(ContentType.Application.Json)
+    }
+}
+```
+
+- **`ContentNegotiation`, with the same format the server registered.** Without it nothing can be serialized.
+- **A base URL, in `defaultRequest`.** A call contributes only its own path segments, which are appended to this one.
+  *The base URL must end in a slash* if it carries a path: this is ordinary URL resolution, so
+  `https://api.example.com/v1` treats `v1` as a resource to be replaced and the prefix is silently lost, whereas
+  `https://api.example.com/v1/` keeps it.
+- **A `Content-Type`, in `defaultRequest`.** `ContentNegotiation` chooses its converter from the request's content
+  type, so with none set it cannot serialize a request body: every `post`, `put` and `patch` fails before reaching
+  the network, and — because the failure happens while preparing the request — it surfaces as a `NetworkFailure`,
+  which names neither the cause nor the fix.
+
+Anything else the calls need — authentication, logging, timeouts, an engine — is configured on the same client, or
+per call through `buildRequest` below.
+
+It returns a `ServiceCaller`, which runs one call and reports its outcome as a `CallStatus.Result`:
 
 ```kotlin
 val users = APIServices.users(client)
