@@ -112,8 +112,8 @@ class NomiServiceCallerTests {
         }
 
         caller.call(NType<Unit>(), NType<CallerTestFail>()) {
-            contextOf<ServiceCaller.CallBuilder>().buildRequest { applied.add("first") }
-            contextOf<ServiceCaller.CallBuilder>().buildRequest { applied.add("second") }
+            buildRequest { applied.add("first") }
+            buildRequest { applied.add("second") }
             Either.value(Unit)
         }
 

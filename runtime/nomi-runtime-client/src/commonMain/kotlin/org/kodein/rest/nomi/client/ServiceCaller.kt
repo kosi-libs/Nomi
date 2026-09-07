@@ -23,6 +23,11 @@ public interface ServiceCaller<T : EndpointService> {
     ): CallStatus.Result<S, F>
 }
 
+context(cb: CallBuilder)
+public fun buildRequest(block: HttpRequestBuilder.() -> Unit) {
+    cb.buildRequest(block)
+}
+
 @InternalNomiAPI
 public class NomiServiceCaller<T : EndpointService>(
     private val client: HttpClient,
