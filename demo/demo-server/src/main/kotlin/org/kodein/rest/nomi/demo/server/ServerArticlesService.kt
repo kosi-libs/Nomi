@@ -48,8 +48,8 @@ class ServerArticlesService : ArticlesService {
         )
     )
 
-    override suspend fun Articles.get(page: Int?): Either<List<ArticleSummary>, NoFail> {
-        if (page != null && page != 0) return value(emptyList())
+    override suspend fun Articles.get(page: Int?): Either<List<ArticleSummary>?, NoFail> {
+        if (page != null && page != 0) return value(null)
         return value(articles.map { (id, content) -> ArticleSummary(id, content.title, content.author) })
     }
 
@@ -76,7 +76,8 @@ class ServerArticlesService : ArticlesService {
         return unit()
     }
 
-    override suspend fun Article.Comments.get(page: Int?): Either<List<ArticleComment>, NoFail> {
+    override suspend fun Article.Comments.get(page: Int?): Either<List<ArticleComment>?, NoFail> {
+        if (page != null && page != 0) return value(null)
         val (_, _, comments) = getArticle(articleId)
         return value(comments)
     }

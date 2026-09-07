@@ -7,6 +7,7 @@ import org.kodein.rest.nomi.InternalNomiAPI
 import org.kodein.rest.nomi.client.ServiceCaller.CallBuilder
 import org.kodein.rest.nomi.Either
 import org.kodein.rest.nomi.Error
+import org.kodein.rest.nomi.NType
 import org.kodein.rest.nomi.on
 import kotlin.reflect.KClass
 
@@ -16,8 +17,8 @@ public interface ServiceCaller<T : EndpointService> {
         public fun buildRequest(block: HttpRequestBuilder.() -> Unit)
     }
     public suspend fun <S, F : Error> call(
-        successClass: KClass<S & Any>,
-        failureClass: KClass<F>,
+        successType: NType<S>,
+        failureType: NType<F>,
         call: suspend context(CallBuilder) T.() -> Either<S, F>
     ): CallStatus.Result<S, F>
 }
@@ -39,8 +40,8 @@ public class NomiServiceCaller<T : EndpointService>(
     }
 
     override suspend fun <S, F : Error> call(
-        successClass: KClass<S & Any>,
-        failureClass: KClass<F>,
+        successType: NType<S>,
+        failureType: NType<F>,
         call: suspend context(CallBuilder) T.() -> Either<S, F>
     ): CallStatus.Result<S, F> {
         val callBuilder = CallBuilderImpl()
@@ -48,8 +49,8 @@ public class NomiServiceCaller<T : EndpointService>(
         try {
             return call(callBuilder, service(client) { callBuilder.execute(this) })
                 .on(
-                    valueClass = successClass,
-                    errorClass = failureClass,
+                    valueType = successType,
+                    errorType = failureType,
                     value = { CallStatus.Success(it) },
                     error = { CallStatus.CallFailure(it) }
                 )
@@ -62,7 +63,7 @@ public class NomiServiceCaller<T : EndpointService>(
 
 }
 
-public suspend inline fun <T : EndpointService, reified S : Any, reified F : Error> ServiceCaller<T>.call(
+public suspend inline fun <T : EndpointService, reified S, reified F : Error> ServiceCaller<T>.call(
     noinline call: suspend context(CallBuilder) T.() -> Either<S, F>
 ): CallStatus.Result<S, F> =
-    call(S::class, F::class, call)
+    call(NType<S>(), NType<F>(), call)

@@ -26,7 +26,7 @@ interface Article {
 @Endpoint.Service
 interface ArticlesService : EndpointService {
 
-    suspend fun Articles.get(@Endpoint.Query page: Int? = null): Either<List<ArticleSummary>, NoFail>
+    suspend fun Articles.get(@Endpoint.Query page: Int? = null): Either<List<ArticleSummary>?, NoFail>
 
     @Endpoint(Endpoint.Method.Post)
     suspend fun Articles.New.create(content: ArticleContent): Either<Uuid, ArticleCreationFailure>
@@ -35,7 +35,7 @@ interface ArticlesService : EndpointService {
 
     suspend fun Article.delete(): Either<Unit, NoFail>
 
-    suspend fun Article.Comments.get(@Endpoint.Query page: Int? = null): Either<List<ArticleComment>, NoFail>
+    suspend fun Article.Comments.get(@Endpoint.Query page: Int? = null): Either<List<ArticleComment>?, NoFail>
 
     suspend fun Article.Comments.post(comment: ArticleComment): Either<Unit, ArticleCommentFailure>
 }

@@ -34,7 +34,7 @@ private class NomiAPIServicesArticlesServiceClient(
     override val buildRequest: HttpRequestBuilder.() -> Unit
 ) : ArticlesService, NomiClientEndpointService {
 
-    override suspend fun Articles.get(page: Int?): Either<List<ArticleSummary>, NoFail> =
+    override suspend fun Articles.get(page: Int?): Either<List<ArticleSummary>?, NoFail> =
         client.call(
             pathSegments = listOf(
                 "articles"
@@ -73,7 +73,7 @@ private class NomiAPIServicesArticlesServiceClient(
             method = Delete,
         )
 
-    override suspend fun Article.Comments.get(page: Int?): Either<List<ArticleComment>, NoFail> =
+    override suspend fun Article.Comments.get(page: Int?): Either<List<ArticleComment>?, NoFail> =
         client.call(
             pathSegments = listOf(
                 "article",

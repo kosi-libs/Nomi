@@ -8,15 +8,20 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.isSuccess
+import io.ktor.util.reflect.TypeInfo
+import io.ktor.util.reflect.typeInfo
 import org.kodein.rest.nomi.EndpointService
 import org.kodein.rest.nomi.InternalNomiAPI
 import org.kodein.rest.nomi.LightException
 import org.kodein.rest.nomi.Stringer
 import org.kodein.rest.nomi.Either
 import org.kodein.rest.nomi.Either.Companion.error
+import org.kodein.rest.nomi.Either.Companion.unit
 import org.kodein.rest.nomi.Either.Companion.value
 import org.kodein.rest.nomi.Error
+import org.kodein.rest.nomi.NType
 import kotlin.coroutines.cancellation.CancellationException
+import kotlin.reflect.KClass
 
 
 @InternalNomiAPI
@@ -34,8 +39,11 @@ public interface NomiClientEndpointService : EndpointService {
 }
 
 @InternalNomiAPI
+@PublishedApi
 context(service: NomiClientEndpointService)
-public suspend inline fun <reified S, reified F : Error> HttpClient.call(
+internal suspend fun <S, F : Error> HttpClient.call(
+    successType: TypeInfo,
+    errorType: TypeInfo,
     pathSegments: List<String>,
     method: HttpMethod,
     buildRequest: HttpRequestBuilder.() -> Unit = {}
@@ -53,10 +61,33 @@ public suspend inline fun <reified S, reified F : Error> HttpClient.call(
     } catch (e: Throwable) {
         throw EndpointNetworkException(e.message, e)
     }
-    if (response.status.isSuccess()) return value(response.body())
-    if (response.status == HttpStatusCode.UnprocessableEntity) return error(response.body())
+    if (response.status.isSuccess()) {
+        if (response.status == HttpStatusCode.NoContent) {
+            @Suppress("UNCHECKED_CAST")
+            return (
+                if (successType.type == Unit::class) unit<F>() as Either<S, F>
+                else value(null as S)
+            )
+        }
+        return value(response.body(successType))
+    }
+    if (response.status == HttpStatusCode.UnprocessableEntity) return error(response.body(errorType))
     throw EndpointStatusCodeException(response.status, response.bodyAsText())
 }
+
+@InternalNomiAPI
+context(service: NomiClientEndpointService)
+public suspend inline fun <reified S, reified F : Error> HttpClient.call(
+    pathSegments: List<String>,
+    method: HttpMethod,
+    crossinline buildRequest: HttpRequestBuilder.() -> Unit = {}
+): Either<S, F> = call(
+    pathSegments = pathSegments,
+    successType = typeInfo<S>(),
+    errorType = typeInfo<F>(),
+    method = method,
+    buildRequest = { buildRequest() }
+)
 
 @InternalNomiAPI
 context(_: NomiClientEndpointService)
