@@ -8,19 +8,19 @@ import kotlin.uuid.Uuid
 
 
 @Endpoint.Resource
-interface Articles {
+sealed interface Articles {
 
     @Endpoint.Resource
-    interface New : Articles
+    sealed interface New : Articles
 }
 
 @Endpoint.Resource
 @UseSharedStringers
-interface Article {
+sealed interface Article {
     val articleId: Uuid
 
     @Endpoint.Resource
-    interface Comments : Article
+    sealed interface Comments : Article
 }
 
 @Endpoint.Service
