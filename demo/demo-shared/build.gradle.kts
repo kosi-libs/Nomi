@@ -1,6 +1,9 @@
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompilationTask
+
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.kotlin.plugin.serialization)
+    alias(libs.plugins.ksp)
 }
 
 kotlin {
@@ -43,6 +46,9 @@ kotlin {
     }
 
     sourceSets {
+        commonMain {
+            kotlin.srcDir(layout.buildDirectory.dir("generated/ksp/metadata/commonMain/kotlin"))
+        }
         commonMain.dependencies {
             implementation(projects.runtime.nomiRuntimeShared)
             implementation(libs.kotlinx.coroutines)
@@ -53,5 +59,18 @@ kotlin {
             implementation(libs.kotlin.test)
             implementation(libs.kotlinx.coroutines.test)
         }
+    }
+}
+
+dependencies {
+    add("kspCommonMainMetadata", projects.processor.nomiProcessorShared)
+}
+
+// Every compilation - and every per-target KSP task, which also reads commonMain as part of its
+// merged source set even though it has no processor registered - consumes the KSP-generated
+// commonMain sources, so all of them must wait for KSP to run.
+tasks.matching { it.name != "kspCommonMainKotlinMetadata" }.configureEach {
+    if (name.startsWith("ksp") || this is KotlinCompilationTask<*>) {
+        dependsOn("kspCommonMainKotlinMetadata")
     }
 }

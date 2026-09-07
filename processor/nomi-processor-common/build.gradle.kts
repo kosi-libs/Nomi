@@ -8,7 +8,9 @@ kotlin {
 }
 
 dependencies {
-    implementation(libs.ksp.symbolProcessingApi)
+    // KSP types appear in this module's own public signatures (ResourceAnalyzer, Reporter,
+    // AnalyzedResource, ...), so they belong in its published POM's compile scope.
+    api(libs.ksp.symbolProcessingApi)
 
     testImplementation(libs.kotlin.test.junit)
     testImplementation(projects.runtime.nomiRuntimeShared)
