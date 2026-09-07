@@ -47,7 +47,6 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             api(projects.runtime.nomiRuntimeShared)
-            implementation(libs.kotlinx.coroutines)
             api(libs.ktor.client)
         }
         commonTest.dependencies {
