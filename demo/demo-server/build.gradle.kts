@@ -1,5 +1,6 @@
 plugins {
     alias(libs.plugins.kotlin.jvm)
+    alias(libs.plugins.ksp)
 }
 
 kotlin {
@@ -14,4 +15,6 @@ dependencies {
     implementation(libs.ktor.server.cio)
     implementation(libs.ktor.server.contentNegotiation)
     implementation(libs.ktor.serialization.json)
+
+    ksp(projects.processor.nomiProcessorServer)
 }

@@ -104,7 +104,7 @@ class PathParameterTypeTests {
     }
 
     @Test
-    fun `rejects Endpoint Stringed on a String property`() {
+    fun `accepts a custom Stringer registration for String, overriding the builtin passthrough`() {
         val result = compile(
             SourceFile.kotlin(
                 "endpoints.kt",
@@ -124,39 +124,16 @@ class PathParameterTypeTests {
                     @Endpoint.Stringed(DummyStringer::class)
                     val name: String
                 }
-                """,
-            ),
-        )
-        assertEquals(KotlinCompilation.ExitCode.COMPILATION_ERROR, result.exitCode)
-        assertTrue(result.errors().any { it.contains("name") }, result.errors().toString())
-    }
-
-    @Test
-    fun `rejects a UseStringer registration for String in scope of a String property`() {
-        val result = compile(
-            SourceFile.kotlin(
-                "endpoints.kt",
-                """
-                package test
-                import org.kodein.rest.nomi.Endpoint
-                import org.kodein.rest.nomi.Stringer
-                import org.kodein.rest.nomi.Either
-
-                object DummyStringer : Stringer<String> {
-                    override fun encode(value: String) = value
-                    override fun decode(encoded: String) = Either.Companion.value<String, Stringer.Failure>(encoded)
-                }
 
                 @Endpoint.Resource
                 @Endpoint.UseStringer(String::class, DummyStringer::class)
-                interface Res {
+                interface Res2 {
                     val name: String
                 }
                 """,
             ),
         )
-        assertEquals(KotlinCompilation.ExitCode.COMPILATION_ERROR, result.exitCode)
-        assertTrue(result.errors().any { it.contains("String") }, result.errors().toString())
+        assertEquals(KotlinCompilation.ExitCode.OK, result.exitCode, result.errors().joinToString("\n"))
     }
 
     @Test

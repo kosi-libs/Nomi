@@ -34,6 +34,11 @@ public interface Stringer<T> {
                 encoded.toLongOrNull()?.let { value(it) } ?: error(Failure("Invalid long integer number"))
         }
 
+        public object StringStringer : Stringer<String> {
+            override fun encode(value: String): String = value
+            override fun decode(encoded: String): Either<String, Failure> = value(encoded)
+        }
+
     }
 }
 

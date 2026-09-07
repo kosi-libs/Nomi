@@ -3,6 +3,7 @@ package org.kodein.rest.nomi
 import org.kodein.rest.nomi.Stringer.Builtins.BooleanStringer
 import org.kodein.rest.nomi.Stringer.Builtins.IntStringer
 import org.kodein.rest.nomi.Stringer.Builtins.LongStringer
+import org.kodein.rest.nomi.Stringer.Builtins.StringStringer
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -76,6 +77,21 @@ class StringerTests {
             assertTrue(result.isError(), "expected '$input' to fail to decode")
             assertEquals("Invalid long integer number", result.error().reason)
         }
+    }
+
+    // --- StringStringer ----------------------------------------------------------------------------
+
+    @Test
+    fun `StringStringer passes its input straight through unescaped`() {
+        for (s in listOf("", "plain", "with space", "a/b?c=d&e#f", "%2F", "λ 漢字 🎉")) {
+            assertEquals(s, StringStringer.encode(s))
+            assertEquals(s, StringStringer.decode(s).value())
+        }
+    }
+
+    @Test
+    fun `StringStringer never fails to decode`() {
+        assertTrue(StringStringer.decode("anything at all").isValue())
     }
 
     // --- shared cross-check ----------------------------------------------------------------------

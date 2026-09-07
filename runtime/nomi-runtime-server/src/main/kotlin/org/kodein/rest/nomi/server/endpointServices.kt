@@ -69,3 +69,10 @@ context(_: EndpointService)
 public inline fun <reified T> decode(stringer: Stringer<T>, encoded: String): T {
     return stringer.decode(encoded).valueOr { httpError(HttpStatusCode.BadRequest, it.reason) }
 }
+
+@InternalNomiAPI
+context(_: EndpointService)
+public inline fun <reified T> decodeRequired(stringer: Stringer<T>, name: String, encoded: String?): T {
+    if (encoded == null) httpError(HttpStatusCode.BadRequest, "Missing required query parameter '$name'")
+    return decode(stringer, encoded)
+}

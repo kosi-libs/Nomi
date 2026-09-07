@@ -52,4 +52,29 @@ class DecodeTests {
             assertEquals("Invalid integer number", ex.message)
         }
     }
+
+    @Test
+    fun `decodeRequired decodes a valid string`() {
+        with(DecodeFakeService()) {
+            assertEquals(42, decodeRequired(IntStringer, "page", "42"))
+        }
+    }
+
+    @Test
+    fun `decodeRequired throws BadRequest naming the missing parameter when absent`() {
+        with(DecodeFakeService()) {
+            val ex = assertFailsWith<EndpointStatusCodeException> { decodeRequired(IntStringer, "page", null) }
+            assertEquals(HttpStatusCode.BadRequest, ex.code)
+            assertEquals("Missing required query parameter 'page'", ex.message)
+        }
+    }
+
+    @Test
+    fun `decodeRequired throws BadRequest carrying the Stringer failure reason when present but invalid`() {
+        with(DecodeFakeService()) {
+            val ex = assertFailsWith<EndpointStatusCodeException> { decodeRequired(IntStringer, "page", "nope") }
+            assertEquals(HttpStatusCode.BadRequest, ex.code)
+            assertEquals("Invalid integer number", ex.message)
+        }
+    }
 }

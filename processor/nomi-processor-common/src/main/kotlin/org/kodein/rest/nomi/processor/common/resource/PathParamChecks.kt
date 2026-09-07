@@ -9,17 +9,12 @@ import com.google.devtools.ksp.symbol.Variance
 import org.kodein.rest.nomi.processor.common.NomiErrors
 import org.kodein.rest.nomi.processor.common.NomiFq
 import org.kodein.rest.nomi.processor.common.Reporter
+import org.kodein.rest.nomi.processor.common.ksp.ARRAY_FQ_NAMES
 import org.kodein.rest.nomi.processor.common.ksp.annotationNamed
 import org.kodein.rest.nomi.processor.common.ksp.expandTypealias
+import org.kodein.rest.nomi.processor.common.ksp.fq
 import org.kodein.rest.nomi.processor.common.stringer.Registration
 import org.kodein.rest.nomi.processor.common.stringer.StringerResolver
-
-private val ARRAY_FQ_NAMES = setOf(
-    "kotlin.Array",
-    "kotlin.BooleanArray", "kotlin.ByteArray", "kotlin.CharArray", "kotlin.DoubleArray",
-    "kotlin.FloatArray", "kotlin.IntArray", "kotlin.LongArray", "kotlin.ShortArray",
-    "kotlin.UByteArray", "kotlin.UIntArray", "kotlin.ULongArray", "kotlin.UShortArray",
-)
 
 /** SPECS.md § Path parameter types. */
 public object PathParamChecks {
@@ -62,16 +57,6 @@ public object PathParamChecks {
 
         val stringed = property.annotationNamed(NomiFq.STRINGED)
 
-        if (fqName == "kotlin.String") {
-            if (stringed != null) {
-                reporter.error(property, NomiErrors.pathParamStringedOnString(name)); return null
-            }
-            if (scopes.any { scope -> scope.any { it.type == "kotlin.String" } }) {
-                reporter.error(property, NomiErrors.pathParamUseStringerRegistersString(name)); return null
-            }
-            return PathParam(property, name, type, stringer = null)
-        }
-
         if (type.arguments.isNotEmpty() && stringed == null) {
             // A parameterized type can only be served a Stringer via @Endpoint.Stringed on this
             // specific property: @Endpoint.UseStringer(type = ...) can only name a raw class.
@@ -79,7 +64,7 @@ public object PathParamChecks {
             return null
         }
 
-        val stringer = stringerResolver.resolveFor(property, type, stringed, scopes, user) ?: return null
+        val stringer = stringerResolver.resolveFor(property, property.fq(), type, stringed, scopes, user) ?: return null
         return PathParam(property, name, type, stringer)
     }
 }

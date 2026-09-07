@@ -91,13 +91,18 @@ public class StringerResolver(private val resolver: Resolver, private val report
     }
 
     /**
-     * Resolves a `Stringer` for [owner]'s [type] (already typealias-expanded and non-nullable),
+     * Resolves a `Stringer` for [ownerName]'s [type] (already typealias-expanded and non-nullable),
      * in [scopes] (nearest first, see [scopesOf]) - `@Endpoint.Stringed` on [owner], if present,
      * wins outright. [user] is the declaration whose visibility the Stringer must be at least as
-     * visible as. Returns `null` when nothing resolves, having already reported why.
+     * visible as. Returns `null` when nothing resolves, having already reported why. [owner] is
+     * only the diagnostic's location - a resource path parameter (a [KSDeclaration]) and an
+     * endpoint query parameter (a [com.google.devtools.ksp.symbol.KSValueParameter], which is not
+     * one) share this one resolution path, so the caller supplies [ownerName] itself rather than
+     * this function deriving it via [KSDeclaration.fq].
      */
     public fun resolveFor(
-        owner: KSDeclaration,
+        owner: KSNode,
+        ownerName: String,
         type: KSType,
         stringed: KSAnnotation?,
         scopes: List<List<Registration<String, KSClassDeclaration>>>,
@@ -110,7 +115,7 @@ public class StringerResolver(private val resolver: Resolver, private val report
 
         val typeFq = type.declaration.qualifiedName?.asString()
         if (typeFq == null) {
-            reporter.error(owner, NomiErrors.stringerUnresolved("?", owner.fq()))
+            reporter.error(owner, NomiErrors.stringerUnresolved("?", ownerName))
             return null
         }
 
@@ -128,7 +133,7 @@ public class StringerResolver(private val resolver: Resolver, private val report
                 if (builtin != null) {
                     StringerRef.Builtin(builtin)
                 } else {
-                    reporter.error(owner, NomiErrors.stringerUnresolved(typeFq, owner.fq()))
+                    reporter.error(owner, NomiErrors.stringerUnresolved(typeFq, ownerName))
                     null
                 }
             }
@@ -177,10 +182,6 @@ public class StringerResolver(private val resolver: Resolver, private val report
     /** SPECS.md § Stringers - rules on the `type =` argument of a `@Endpoint.UseStringer` registration. */
     public fun checkUseStringerType(type: KSType, at: KSNode): Boolean {
         val fqName = type.declaration.qualifiedName?.asString()
-        if (fqName == "kotlin.String") {
-            reporter.error(at, NomiErrors.useStringerRegistersString())
-            return false
-        }
         if (fqName in FORBIDDEN_STRINGER_TYPE_FQ_NAMES || fqName in ARRAY_FQ_NAMES) {
             reporter.error(at, NomiErrors.useStringerTypeForbidden(fqName ?: "?"))
             return false

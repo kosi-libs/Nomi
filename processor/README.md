@@ -7,18 +7,21 @@ nomi-processor-common   analysis & validation only - not a runnable processor
     ↑
     ├── nomi-processor-shared   generates Nomi<Chain> resource impls + factory functions
     ├── nomi-processor-client   (not yet written)
-    └── nomi-processor-server   (not yet written)
+    └── nomi-processor-server   generates fun Route.service(service: <Impl>) per @ServerEndpointService
 ```
 
 `nomi-processor-common` holds every verification rule from `SPECS.md` §"Verifications" that a
-processor needs — currently the subset relevant to `@Endpoint.Resource` and `Stringer` declarations
-(General, Resource declarations, Path parameter types, Resource paths, Stringers, and the
-resource/factory half of Generated-name collisions). Per that section: *"each processor verifies
-every declaration it reads, including ones from a dependency module — it never assumes a dependency
-was already checked by whichever processor built it."* Rules about services, endpoint functions,
-server implementations, and client factories belong here too, but are added only once
-`nomi-processor-client`/`-server` are actually written and need them — there's no value in
-validating declarations no processor yet reads.
+processor needs — `@Endpoint.Resource` and `Stringer` declarations (General, Resource declarations,
+Path parameter types, Resource paths, Stringers, and the resource/factory half of Generated-name
+collisions), plus everything about `@Endpoint.Service` interfaces and the endpoint functions they
+declare (Service declarations, Endpoint functions, Endpoint parameters, Endpoint return types) —
+added once `nomi-processor-server` needed them, and shared as-is once `nomi-processor-client` is
+written, since both read the identical service-side rules. Per that section: *"each processor
+verifies every declaration it reads, including ones from a dependency module — it never assumes a
+dependency was already checked by whichever processor built it."* Only `@ServerEndpointService`'s
+own rules (SPECS.md §"Server implementations") live in `nomi-processor-server` itself; client
+factory rules belong in `nomi-processor-client` once it exists — there's no value in validating
+declarations no processor yet reads.
 
 ## The reusable surface
 
@@ -31,11 +34,20 @@ validating declarations no processor yet reads.
 - **`resourcePath(simpleName, declaredPath, ownParameters)`** (`path/ResourcePathParser.kt`) is a
   *pure* function — no KSP import at all — that derives or parses a resource's path per
   SPECS.md §"Resource paths". Being pure, it's tested directly with `kotlin-test`, no compiler needed.
-- **`StringerResolver.resolveFor(owner, type, stringed, scopes, user)`** (`stringer/StringerResolver.kt`)
-  resolves a `Stringer` for any already-nullability-stripped `KSType`, given a nearest-first list of
-  annotation scopes from `scopesOf(chain)`. It's written to be reusable for an endpoint query
-  parameter later, not just a resource path parameter — the nullability-stripping and "is this the
-  request body?" decisions are the *caller's* job, kept out of this function on purpose.
+- **`StringerResolver.resolveFor(owner, ownerName, type, stringed, scopes, user)`**
+  (`stringer/StringerResolver.kt`) resolves a `Stringer` for any already-nullability-stripped
+  `KSType`, given a nearest-first list of annotation scopes from `scopesOf(chain)`. It serves both a
+  resource path parameter and an endpoint query parameter — the nullability-stripping and "is this
+  the request body?" decisions are the *caller's* job, kept out of this function on purpose; `owner`
+  is only the diagnostic's location (a `KSPropertyDeclaration` and a `KSValueParameter` share this
+  one path but aren't both `KSDeclaration`s), so the caller passes `ownerName` itself.
+- **`ServiceAnalyzer`** (`service/ServiceAnalyzer.kt`) is the `@Endpoint.Service` analogue of
+  `ResourceAnalyzer`: `analyze(declaration)` collects a service's own endpoints plus those of every
+  `@Endpoint.Service` interface it extends (breadth-first, each interface visited once), validating
+  each endpoint's function shape (`EndpointChecks`), body/query parameters (`EndpointParamChecks`)
+  and `Either<V, E>` return type (`ReturnTypeChecks`) along the way — returning `null`, having
+  already reported every violation, for an invalid service. An endpoint's Stringer scope starts at
+  the interface that *declares* it, not the leaf service being analyzed (SPECS.md § Stringers).
 - **`NomiFq`** (`NomiFqNames.kt`) is the one place every Nomi annotation's fully-qualified name is
   written down as a string constant.
 
@@ -50,11 +62,20 @@ implements, rather than restating the rule in prose — the rule itself lives in
    parsing (`ResourcePathParserTests`), the annotation-tree breadth-first walk
    (`AnnotationTreeWalkTests`), the nearest-wins Stringer resolution algorithm
    (`StringerResolutionTests`), and generated-name derivation (`GeneratedNameTests`).
-2. **Real KSP rounds**, in `nomi-processor-shared`'s `src/test`, using `dev.zacsweers.kctfork` to
-   compile fixture source through the actual processor and assert on `KotlinCompilation.ExitCode`
-   and `diagnosticMessages`. This is where the *whole* validation rule set is exercised end-to-end —
+2. **Real KSP rounds**, using `dev.zacsweers.kctfork` to compile fixture source through the actual
+   processor(s) and assert on `KotlinCompilation.ExitCode` and `diagnosticMessages` —
    `nomi-processor-common` has no compiler test harness of its own, so this is deliberately the
-   primary place these rules get proven correct, even though most of them live in the other module.
+   primary place its rules get proven correct, even though the rules themselves live in the other
+   module:
+   - The `@Endpoint.Resource`/`Stringer` rule set is exercised end-to-end in
+     `nomi-processor-shared`'s `src/test`.
+   - The `@Endpoint.Service`/endpoint-function rule set is exercised end-to-end in
+     `nomi-processor-server`'s `src/test` instead, alongside that module's own
+     `@ServerEndpointService` rules — the server processor is the first (and, once
+     `nomi-processor-client` exists, not the only) reader of those declarations, so its tests
+     double as `ServiceAnalyzer`'s proof. Its `ProcessorTestSupport.compile` registers *both*
+     `NomiSharedProcessorProvider` and `NomiServerProcessorProvider`, since a fixture's resources
+     need their `Nomi…` implementations generated in the same round the server processor reads them.
 
 ## Gotchas
 
@@ -68,8 +89,15 @@ implements, rather than restating the rule in prose — the rule itself lives in
 - **KSP/kctfork version pin**: `kctfork:ksp:0.13.0`'s own POM requests the KSP2 implementation
   artifacts (`symbol-processing-aa-embeddable`, `-common-deps`) a version *older* than
   `symbol-processing-api` in the version catalog. `gradle/libs.versions.toml` pins
-  `ksp-aaEmbeddable` to the same version as `ksp-symbolProcessingApi` to close that gap — carry this
-  forward when `nomi-processor-client`/`-server` add their own `kctfork` test dependency.
+  `ksp-aaEmbeddable` to the same version as `ksp-symbolProcessingApi` to close that gap —
+  `nomi-processor-server`'s `build.gradle.kts` already carries this forward; do the same in
+  `nomi-processor-client` once it adds its own `kctfork` test dependency.
+- **A generated function calling an `inline` runtime function needs a matching JVM target.**
+  `nomi-runtime-server`'s `decode`/`decodeOrNull`/`decodeRequired`/`respond` are `inline`, compiled
+  at this project's `jvmToolchain(17)`; a `kctfork` `KotlinCompilation` defaults to a lower JVM
+  target and the Kotlin compiler refuses to inline JVM-17 bytecode into it. Set
+  `jvmTarget = "17"` on the `KotlinCompilation` (see `nomi-processor-server`'s
+  `ProcessorTestSupport.kt`) wherever a processor's generated code calls such a function.
 - **Emitting `context(_: EndpointService)`**: use KotlinPoet's `FunSpec.Builder.contextParameter(ContextParameter(type))`
   (`@ExperimentalKotlinPoetApi`, `ContextParameter(type)` defaults its name to `_`) — never the
   deprecated `contextReceivers(...)`, which emits the old receiver-style syntax and is mutually

@@ -390,7 +390,7 @@ class StringerTests {
     }
 
     @Test
-    fun `rejects Endpoint UseStringer registering String, Unit, Any, an array or an annotation class`() {
+    fun `rejects Endpoint UseStringer registering Unit, Any, an array or an annotation class`() {
         val result = compile(
             SourceFile.kotlin(
                 "endpoints.kt",
@@ -406,9 +406,6 @@ class StringerTests {
                 }
                 annotation class SomeAnnotation
 
-                @Endpoint.Resource
-                @Endpoint.UseStringer(String::class, AnyStringer::class)
-                interface ResA { val id: Int }
                 @Endpoint.Resource
                 @Endpoint.UseStringer(Unit::class, AnyStringer::class)
                 interface ResB { val id: Int }
@@ -426,7 +423,6 @@ class StringerTests {
         )
         assertEquals(KotlinCompilation.ExitCode.COMPILATION_ERROR, result.exitCode)
         val errors = result.errors()
-        assertTrue(errors.any { it.contains("String") }, errors.toString())
         assertTrue(errors.any { it.contains("Unit") }, errors.toString())
         assertTrue(errors.any { it.contains("Any") }, errors.toString())
         assertTrue(errors.any { it.contains("array", ignoreCase = true) }, errors.toString())

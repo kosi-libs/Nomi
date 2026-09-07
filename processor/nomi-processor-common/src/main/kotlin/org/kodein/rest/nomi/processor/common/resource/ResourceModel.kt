@@ -8,12 +8,12 @@ import com.google.devtools.ksp.symbol.Visibility
 import org.kodein.rest.nomi.processor.common.path.ResourcePath
 import org.kodein.rest.nomi.processor.common.stringer.StringerRef
 
-/** One resolved path parameter, own or inherited. [stringer] is null for a `String`-typed one. */
+/** One resolved path parameter, own or inherited. */
 public class PathParam(
     public val declaration: KSPropertyDeclaration,
     public val name: String,
     public val type: KSType,
-    public val stringer: StringerRef?,
+    public val stringer: StringerRef,
 )
 
 /** A fully validated `@Endpoint.Resource` interface - never constructed for an invalid one. */

@@ -148,17 +148,15 @@ defines the following endpoints:
 All resource path parameters and all service endpoint query arguments must be converted to `String` by the client, and parsed by the server.
 That is the role of the `Stringer` interface.
 
-A parameter that is already a `String` needs no `Stringer`: the client passes its value through unchanged, and the
-server hands the received value back as it stands. There is deliberately no built-in `Stringer` for `String`, and
-declaring one for it — with `@Endpoint.Stringed` or `@Endpoint.UseStringer` — is an error.
-Escaping is not a `Stringer`'s concern in either case: the runtime percent-encodes every path segment and query value
-on its way out and decodes it on the way back in, so a `Stringer` always encodes to, and decodes from, the *unescaped*
-text. A `Stringer` that escapes its own output would have that output escaped a second time.
+Escaping is not a `Stringer`'s concern: the runtime percent-encodes every path segment and query value on its way out
+and decodes it on the way back in, so a `Stringer` always encodes to, and decodes from, the *unescaped* text. A
+`Stringer` that escapes its own output would have that output escaped a second time.
 
-Built-in Stringers are provided for `Boolean`, `Int` and `Long`. They act as the outermost, lowest-priority link of
-the resolution chain below: a project may register its own `Stringer` for one of these types (with `@Endpoint.Stringed`
-or `@Endpoint.UseStringer`, exactly as for any other type) to override the built-in encoding, but never for `String`.
-For any other non-`String` type, the user must provide a `Stringer` for the specific type.
+Built-in Stringers are provided for `Boolean`, `Int`, `Long` and `String` (the last a passthrough: the client sends
+its value unchanged, and the server hands the received value back as it stands). They act as the outermost,
+lowest-priority link of the resolution chain below: a project may register its own `Stringer` for one of these types
+(with `@Endpoint.Stringed` or `@Endpoint.UseStringer`, exactly as for any other type) to override the built-in
+encoding. For any other type, the user must provide a `Stringer` for the specific type.
 To do so, the user must first create an object that implements the `Stringer` interface (it must be an `object`, neither a `class` nor an `interface` are valid).
 Then, the user must associate the `Stringer` with the type it is used for.
 The processor verifies that the registered object does implement `Stringer<T>` for the type it is registered for.
@@ -360,9 +358,7 @@ unsound.
 
 - A resource property's type must be non-nullable.
 - Must not be a type parameter, a star projection, a functional type, an array, `Unit`, `Nothing` or `Any`.
-- Must be `String`, or have a `Stringer` that resolves per the Stringers rules below.
-- A `String`-typed property must carry no `@Endpoint.Stringed`, and no `@Endpoint.UseStringer` in scope for it may
-  register `String`.
+- Must have a `Stringer` that resolves per the Stringers rules below.
 - A parameterized type (`List<Int>`, say) can only be given a `Stringer` through `@Endpoint.Stringed` on the specific
   property, since `@Endpoint.UseStringer(type = …)` can only name a raw class, not a parameterized one.
 
@@ -401,10 +397,8 @@ legal.
   its own type parameter, is an error.
 - `T` must be exactly the property's or parameter's type, nullability stripped for an optional query parameter —
   `Stringer<Number>` used for an `Int` property is an error, since `decode` must produce the declared type exactly.
-- `@Endpoint.Stringed` on a `String`-typed property or parameter is an error.
 - `@Endpoint.Stringed` on the request-body parameter of an endpoint is an error (the body has no `Stringer`; it is
   (de)serialized as a whole, per the Wire protocol section).
-- `@Endpoint.UseStringer(type = String::class, …)` is an error.
 - `type` must name a class with no type parameters, and must not be `Unit`, `Nothing`, `Any`, an array, an annotation
   class or a functional type. Enum classes, value classes and ordinary classes are all fine.
 - Two registrations for the same `type` reaching one declaration at the same interface distance and the same
@@ -471,8 +465,8 @@ legal.
 - A **nullable** (optional) query parameter may have any default value, including a non-`null` one — defaults apply
   only at the call site, on the client; the server always passes either the decoded value or `null` explicitly. This
   is documented behavior, not an error.
-- A query parameter's type must be `String`, or a type with a `Stringer` that resolves (nullability stripped for the
-  purpose of resolution); it must not be `Unit`, `Nothing`, `Any`, a functional type, a type parameter or an array.
+- A query parameter's type must have a `Stringer` that resolves (nullability stripped for the purpose of resolution);
+  it must not be `Unit`, `Nothing`, `Any`, a functional type, a type parameter or an array.
 - The effective query parameter name — `@Endpoint.Query(name)`'s argument, or the parameter's own name when that
   argument is empty — must be non-blank and match `[A-Za-z_][A-Za-z0-9_.-]*` (no `&`, `=`, `?`, `#`, `%`, `+`, or
   whitespace).
