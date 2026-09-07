@@ -59,7 +59,7 @@ kotlin {
 
 mavenPublishing {
     pom {
-        name = "nomi-runtime-shared"
+        name = "nomi-runtime-client"
         description = "Nomi runtime for client applications"
     }
 }
