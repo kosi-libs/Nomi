@@ -9,7 +9,7 @@ public val IDENTIFIER_REGEX: Regex = Regex("[A-Za-z_][A-Za-z0-9_]*")
 private val SCHEME_REGEX = Regex("^[A-Za-z][A-Za-z0-9+.-]*://")
 
 /**
- * Resolves a resource's [PathResult] per SPECS.md § Resource paths: derives one from [simpleName]
+ * Resolves a resource's [PathResult] per SPECS.adoc § Resource paths: derives one from [simpleName]
  * and [ownParameters] when [declaredPath] is empty (the `@Endpoint.Resource` annotation's default),
  * otherwise parses [declaredPath] itself.
  */

@@ -9,7 +9,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/** SPECS.md § Verifications: "generates nothing for that round if any declaration it would need
+/** SPECS.adoc § Verifications: "generates nothing for that round if any declaration it would need
  * is invalid — never a partial file." */
 class NoPartialOutputTests {
 

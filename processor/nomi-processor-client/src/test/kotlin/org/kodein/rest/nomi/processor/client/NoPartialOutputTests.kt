@@ -9,7 +9,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/** SPECS.md § Verifications: "generates nothing for that round if any declaration it would need
+/** SPECS.adoc § Verifications: "generates nothing for that round if any declaration it would need
  * is invalid — never a partial file." The gate is round-global, matching
  * `nomi-processor-shared`/`-server`'s own precedent: a bad registration on one object still blocks
  * a valid registration on a different object from generating this round, even though each is

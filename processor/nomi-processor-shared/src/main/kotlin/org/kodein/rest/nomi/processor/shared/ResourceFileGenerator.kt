@@ -24,7 +24,7 @@ private val OPT_IN = ClassName("kotlin", "OptIn")
 
 /**
  * Renders each [AnalyzedResource] into the `Nomi<Chain>` implementation + factory function pair
- * described by SPECS.md § Shared processor - one generated file per source file, implementations
+ * described by SPECS.adoc § Shared processor - one generated file per source file, implementations
  * first then factories, matching the hand-written golden file's grouping.
  */
 @OptIn(ExperimentalKotlinPoetApi::class)

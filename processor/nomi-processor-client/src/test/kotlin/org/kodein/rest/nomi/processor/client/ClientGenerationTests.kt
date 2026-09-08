@@ -10,7 +10,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/** SPECS.md § Client processor - generated-code shapes beyond what [DemoGoldenTests] already pins
+/** SPECS.adoc § Client processor - generated-code shapes beyond what [DemoGoldenTests] already pins
  * down exactly. */
 class ClientGenerationTests {
 

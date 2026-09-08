@@ -9,7 +9,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/** SPECS.md § Client factories - the annotated object's own shape rules. */
+/** SPECS.adoc § Client factories - the annotated object's own shape rules. */
 class ClientFactoryDeclarationTests {
 
     @Test

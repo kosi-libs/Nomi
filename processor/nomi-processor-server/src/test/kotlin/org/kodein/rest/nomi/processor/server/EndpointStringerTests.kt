@@ -9,7 +9,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/** Stringer resolution for endpoint query parameters (SPECS.md § Stringers, § Endpoint
+/** Stringer resolution for endpoint query parameters (SPECS.adoc § Stringers, § Endpoint
  * parameters) - the `Stringer` machinery itself is already proven pure/via KSP in
  * `nomi-processor-common`/`nomi-processor-shared`; this covers only what is specific to endpoints:
  * `String` resolving to the builtin passthrough, and the declaring-service scope rule. */

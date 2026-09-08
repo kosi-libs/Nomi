@@ -10,7 +10,7 @@ public sealed interface StringerResolution<S> {
 }
 
 /**
- * Resolves a `Stringer` for [type] per SPECS.md § Stringers' nearest-wins algorithm: [scopes] are
+ * Resolves a `Stringer` for [type] per SPECS.adoc § Stringers' nearest-wins algorithm: [scopes] are
  * ordered nearest-interface-first (index 0 == the declaring interface itself); within a scope,
  * only its shallowest-depth registrations for [type] are considered. Interface distance always
  * dominates annotation depth - a scope is tried only after every registration in every nearer scope

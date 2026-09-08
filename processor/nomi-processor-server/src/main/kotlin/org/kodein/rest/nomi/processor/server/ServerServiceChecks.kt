@@ -13,10 +13,10 @@ import org.kodein.rest.nomi.processor.common.ksp.isNomiService
 import org.kodein.rest.nomi.processor.common.ksp.stringArg
 import org.kodein.rest.nomi.processor.common.path.IDENTIFIER_REGEX
 
-// SPECS.md: "routeName must be non-blank, match [A-Za-z_][A-Za-z0-9_]*, and must not be a Kotlin
+// SPECS.adoc: "routeName must be non-blank, match [A-Za-z_][A-Za-z0-9_]*, and must not be a Kotlin
 // hard keyword." Soft keywords (`by`, `get`, `set`, ...) are fine as identifiers, so only the hard
 // set. Mirrors ClientFactoryChecks' own copy - there's no shared home for it, and each processor
-// validates only the one annotation it reads (see processor/README.md).
+// validates only the one annotation it reads (see processor/SPECS.adoc).
 private val HARD_KEYWORDS = setOf(
     "as", "break", "class", "continue", "do", "else", "false", "for", "fun", "if", "in", "interface",
     "is", "null", "object", "package", "return", "super", "this", "throw", "true", "try", "typealias",
@@ -24,7 +24,7 @@ private val HARD_KEYWORDS = setOf(
 )
 
 /**
- * SPECS.md § Server implementations (`@ServerEndpointService`) - the rules specific to the server
+ * SPECS.adoc § Server implementations (`@ServerEndpointService`) - the rules specific to the server
  * processor. Everything about the `@Endpoint.Service` interfaces themselves lives in
  * `nomi-processor-common`'s `ServiceAnalyzer`, run separately on every service this class
  * implements (see [check]'s return value) - the server processor re-validates them itself rather
@@ -86,7 +86,7 @@ public object ServerServiceChecks {
         return ok
     }
 
-    // SPECS.md § Server implementations: routeName's shape rules, mirroring
+    // SPECS.adoc § Server implementations: routeName's shape rules, mirroring
     // @ClientEndpointServiceFactory.name's identical ones (ClientFactoryChecks.checkRegistration).
     private fun checkRouteName(declaration: KSClassDeclaration, name: String, reporter: Reporter): String? {
         val annotation = declaration.annotationNamed(SERVER_ENDPOINT_SERVICE_FQ) ?: return null

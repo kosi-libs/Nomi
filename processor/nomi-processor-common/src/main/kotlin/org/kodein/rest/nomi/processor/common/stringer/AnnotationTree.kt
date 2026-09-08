@@ -6,12 +6,12 @@ public data class Found<R>(val value: R, val depth: Int)
 /**
  * Walks the annotation tree reachable from [roots] breadth-first, so each node is visited at its
  * minimum depth and a registration is naturally recorded at the shallowest depth it appears at
- * (SPECS.md § Stringers: "the whole annotation tree reachable from a declaration is walked ...
+ * (SPECS.adoc § Stringers: "the whole annotation tree reachable from a declaration is walked ...
  * each registration is recorded at the shallowest depth it is found at"). Guards against a cycle
  * and collapses a diamond into a single visit - but the [roots] themselves are never deduped
  * against each other, since a `@Repeatable` annotation applied more than once produces several
  * roots that share a class identity yet carry independent values, and all of them must count
- * (SPECS.md: "@Endpoint.UseStringer ... is repeatable, so multiple Stringers may be registered to
+ * (SPECS.adoc: "@Endpoint.UseStringer ... is repeatable, so multiple Stringers may be registered to
  * the same interface"). Dedup only ever prevents *re-discovering* an identity through [childrenOf].
  *
  * [identityOf] returns `null` for a node that cannot be identified (e.g. an unresolvable type),

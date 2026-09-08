@@ -68,7 +68,7 @@ public class StringerResolver(private val resolver: Resolver, private val report
                         emptyList()
                     } else {
                         // Every registration's own shape is validated here, at discovery, regardless
-                        // of whether anything in scope ever matches it (SPECS.md only excuses an
+                        // of whether anything in scope ever matches it (SPECS.adoc only excuses an
                         // UNUSED registration from scrutiny, not an intrinsically malformed one).
                         checkUseStringerType(type, ann)
                         checkStringerObject(with, type, ann, scope)
@@ -140,7 +140,7 @@ public class StringerResolver(private val resolver: Resolver, private val report
         }
     }
 
-    /** SPECS.md § Stringers - rules on the `with =` object itself. */
+    /** SPECS.adoc § Stringers - rules on the `with =` object itself. */
     public fun checkStringerObject(candidate: KSClassDeclaration, forType: KSType, at: KSNode, user: KSDeclaration): Boolean {
         if (candidate.classKind != ClassKind.OBJECT) {
             reporter.error(at, NomiErrors.stringerWithNotObject(candidate.fq(), candidate.classKind.name.lowercase()))
@@ -179,7 +179,7 @@ public class StringerResolver(private val resolver: Resolver, private val report
         return true
     }
 
-    /** SPECS.md § Stringers - rules on the `type =` argument of a `@Endpoint.UseStringer` registration. */
+    /** SPECS.adoc § Stringers - rules on the `type =` argument of a `@Endpoint.UseStringer` registration. */
     public fun checkUseStringerType(type: KSType, at: KSNode): Boolean {
         val fqName = type.declaration.qualifiedName?.asString()
         if (fqName in FORBIDDEN_STRINGER_TYPE_FQ_NAMES || fqName in ARRAY_FQ_NAMES) {

@@ -23,8 +23,8 @@ public class BodyParam(
 )
 
 /** One `@Endpoint.Query` parameter, already resolved. [type] is nullability-stripped; [optional]
- * records whether the *declared* parameter type was nullable (SPECS.md § Services: nullable is
- * optional, non-nullable is required). */
+ * records whether the *declared* parameter type was nullable (SPECS.adoc § Endpoint parameters:
+ * nullable is optional, non-nullable is required). */
 public class QueryParam(
     public val declaration: KSValueParameter,
     public val parameterName: String,
@@ -68,8 +68,8 @@ public class AnalyzedService(
 /** [route]'s identity for `(path, method)` collision purposes: a placeholder's own name doesn't
  * matter (two routes differing only in their path parameter's name still collide at the routing
  * layer), only the literal/placeholder shape of each segment does. Used both within one service
- * (SPECS.md § Service declarations) and across every service one `@ServerEndpointService` class
- * implements together (SPECS.md § Server implementations). */
+ * (SPECS.adoc § Service declarations) and across every service one `@ServerEndpointService` class
+ * implements together (SPECS.adoc § Server implementations). */
 public fun routeKey(route: List<PathSegment>, method: HttpMethod): Pair<String, HttpMethod> {
     val canonical = route.joinToString("/") { segment -> segment.prefix + (if (segment.parameter != null) "{}" else "") + segment.suffix }
     return canonical to method

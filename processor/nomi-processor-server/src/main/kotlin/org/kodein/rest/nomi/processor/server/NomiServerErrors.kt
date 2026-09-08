@@ -1,7 +1,7 @@
 package org.kodein.rest.nomi.processor.server
 
 /**
- * Every diagnostic message specific to `@ServerEndpointService` (SPECS.md § Server implementations).
+ * Every diagnostic message specific to `@ServerEndpointService` (SPECS.adoc § Server implementations).
  * Everything about the `@Endpoint.Service` interfaces it implements lives in `nomi-processor-common`'s
  * `NomiErrors`, since the client processor needs those same diagnostics too.
  */

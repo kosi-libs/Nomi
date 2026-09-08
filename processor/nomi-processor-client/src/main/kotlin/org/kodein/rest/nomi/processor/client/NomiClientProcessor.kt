@@ -14,11 +14,11 @@ import org.kodein.rest.nomi.processor.common.service.ServiceAnalyzer
 
 /**
  * Generates, for each `@ClientEndpointServiceFactory` object, the private service implementation +
- * public extension function described by SPECS.md § Client processor. All validation of the
+ * public extension function described by SPECS.adoc § Client processor. All validation of the
  * `@Endpoint.Service` interfaces it names lives in `nomi-processor-common`'s `ServiceAnalyzer` -
  * exactly the same facade the server processor uses - and this module's [ClientFactoryChecks] /
  * [ClientRoundChecks] handle only the `@ClientEndpointServiceFactory` object's own rules. The client
- * processor re-validates every declaration it reads itself (SPECS.md § Verifications): it never
+ * processor re-validates every declaration it reads itself (SPECS.adoc § Verifications): it never
  * assumes a dependency's shared or server processor already ran.
  */
 public class NomiClientProcessor(

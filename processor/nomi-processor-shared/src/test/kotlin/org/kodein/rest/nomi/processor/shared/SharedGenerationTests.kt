@@ -81,7 +81,7 @@ class SharedGenerationTests {
 
     @Test
     fun `passes inherited parameters positionally, parents first, before its own`() {
-        // The Users/User/Posts/Post example from SPECS.md's Shared processor section.
+        // The Users/User/Posts/Post example from SPECS.adoc's Shared processor section.
         val result = compile(
             SourceFile.kotlin(
                 "endpoints.kt",

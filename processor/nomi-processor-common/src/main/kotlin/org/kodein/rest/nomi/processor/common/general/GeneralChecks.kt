@@ -11,7 +11,7 @@ import org.kodein.rest.nomi.processor.common.Reporter
 import org.kodein.rest.nomi.processor.common.ksp.fq
 import org.kodein.rest.nomi.processor.common.ksp.visibilityOrNull
 
-/** SPECS.md § General - the subset relevant to resources and Stringers (see the plan's scope note). */
+/** SPECS.adoc § General - the subset relevant to resources and Stringers (see the plan's scope note). */
 public object GeneralChecks {
 
     public fun checkReadableDeclaration(d: KSDeclaration, r: Reporter): Boolean {

@@ -9,7 +9,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/** SPECS.md § Generated-name collisions - the client-related, round-scoped bullets handled by
+/** SPECS.adoc § Generated-name collisions - the client-related, round-scoped bullets handled by
  * [ClientRoundChecks]. */
 class NameCollisionTests {
 

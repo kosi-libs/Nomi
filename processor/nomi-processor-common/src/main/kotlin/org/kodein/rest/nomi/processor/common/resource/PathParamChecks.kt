@@ -16,7 +16,7 @@ import org.kodein.rest.nomi.processor.common.ksp.fq
 import org.kodein.rest.nomi.processor.common.stringer.Registration
 import org.kodein.rest.nomi.processor.common.stringer.StringerResolver
 
-/** SPECS.md § Path parameter types. */
+/** SPECS.adoc § Path parameter types. */
 public object PathParamChecks {
 
     public fun check(

@@ -6,7 +6,7 @@ import org.kodein.rest.nomi.processor.common.NomiErrors
 import org.kodein.rest.nomi.processor.common.Reporter
 
 /**
- * SPECS.md § Generated-name collisions (the resource-impl and factory-function rules) - needs the
+ * SPECS.adoc § Generated-name collisions (the resource-impl and factory-function rules) - needs the
  * whole round's resources at once, unlike the per-declaration checks in [ResourceChecks].
  */
 public class RoundChecks(private val resolver: Resolver, private val reporter: Reporter) {

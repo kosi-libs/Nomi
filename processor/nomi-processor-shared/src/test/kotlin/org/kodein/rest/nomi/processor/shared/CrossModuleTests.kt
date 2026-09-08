@@ -9,7 +9,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-// SPECS.md: "each processor verifies every declaration it reads, including ones from a dependency
+// SPECS.adoc: "each processor verifies every declaration it reads, including ones from a dependency
 // module - it never assumes a dependency was already checked". These compile a Stringer object in
 // one module, then reference it from a resource in a second module compiled against the first's
 // output, exercising the Origin.KOTLIN_LIB path through StringerResolver.

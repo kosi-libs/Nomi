@@ -17,7 +17,7 @@ import org.kodein.rest.nomi.processor.common.path.resourcePath
 import org.kodein.rest.nomi.processor.common.stringer.StringerResolver
 
 /**
- * Analyzes and validates `@Endpoint.Resource` interfaces, per SPECS.md § Resource declarations,
+ * Analyzes and validates `@Endpoint.Resource` interfaces, per SPECS.adoc § Resource declarations,
  * § Path parameter types, § Resource paths and § Stringers. This is the facade `nomi-processor-shared`
  * (and later `-client`/`-server`) call: [analyze] returns `null` for an invalid resource, having
  * already reported every violation - never a partially-built [AnalyzedResource].
@@ -85,7 +85,7 @@ public class ResourceAnalyzer(resolver: Resolver, private val reporter: Reporter
         )
     }
 
-    // SPECS.md § Resource declarations: a root resource's enclosing declarations must all be
+    // SPECS.adoc § Resource declarations: a root resource's enclosing declarations must all be
     // "plain" - non-local, at least as visible as itself, and not themselves @Endpoint.Resource.
     private fun checkEnclosingDeclarations(declaration: KSClassDeclaration, enclosing: List<KSClassDeclaration>): Boolean {
         var ok = true
@@ -110,7 +110,7 @@ public class ResourceAnalyzer(resolver: Resolver, private val reporter: Reporter
     }
 
     /** Nearest-first: the declaring interface, then its chain of parent resources, then the
-     * plain declarations the root of that chain is nested in. See SPECS.md § Stringers. */
+     * plain declarations the root of that chain is nested in. See SPECS.adoc § Stringers. */
     private fun buildScopeChain(declaration: KSClassDeclaration, parent: AnalyzedResource?, enclosing: List<KSClassDeclaration>): List<KSClassDeclaration> {
         val resourceAncestorNodes = generateSequence(parent) { it.parent }.toList()
         val rootEnclosing = if (parent == null) enclosing else resourceAncestorNodes.last().enclosing

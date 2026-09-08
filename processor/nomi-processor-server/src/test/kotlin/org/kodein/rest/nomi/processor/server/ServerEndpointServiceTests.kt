@@ -9,7 +9,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/** SPECS.md § Server implementations (`@ServerEndpointService`) - the server-only rules. */
+/** SPECS.adoc § Server implementations (`@ServerEndpointService`) - the server-only rules. */
 class ServerEndpointServiceTests {
 
     @Test

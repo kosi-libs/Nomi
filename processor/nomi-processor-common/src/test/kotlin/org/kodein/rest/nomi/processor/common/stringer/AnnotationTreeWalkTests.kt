@@ -101,7 +101,7 @@ class AnnotationTreeWalkTests {
     @Test
     fun `repeated roots of the same annotation class are never deduped against each other`() {
         // @Repeatable @Endpoint.UseStringer(...) applied twice directly on one interface: same
-        // class identity, different data - both must be recorded (SPECS.md: "it is repeatable, so
+        // class identity, different data - both must be recorded (SPECS.adoc: "it is repeatable, so
         // multiple Stringers may be registered to the same interface").
         val first = Node("UseStringer", values = listOf("Uuid -> UuidStringer"))
         val second = Node("UseStringer", values = listOf("Instant -> InstantStringer"))

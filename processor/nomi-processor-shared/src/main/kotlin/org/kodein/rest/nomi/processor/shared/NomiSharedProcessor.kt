@@ -15,7 +15,7 @@ import org.kodein.rest.nomi.processor.common.resource.ResourceAnalyzer
 import org.kodein.rest.nomi.processor.common.resource.RoundChecks
 
 /**
- * Generates the `Nomi<Chain>` implementation + factory function pair described by SPECS.md
+ * Generates the `Nomi<Chain>` implementation + factory function pair described by SPECS.adoc
  * § Shared processor, for every `@Endpoint.Resource` interface. All validation lives in
  * `nomi-processor-common` - this class only wires it to a real `Resolver`/`KSPLogger`/`CodeGenerator`
  * and decides, per round, whether to generate anything at all.

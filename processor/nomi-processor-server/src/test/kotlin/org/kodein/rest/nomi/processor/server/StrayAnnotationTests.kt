@@ -9,7 +9,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/** SPECS.md § General: "Stray annotations are errors." The server processor reads both resources
+/** SPECS.adoc § General: "Stray annotations are errors." The server processor reads both resources
  * and services, so it is the natural place to prove all four rules end-to-end. */
 class StrayAnnotationTests {
 

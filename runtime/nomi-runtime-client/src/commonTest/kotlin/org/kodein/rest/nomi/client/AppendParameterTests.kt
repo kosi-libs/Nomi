@@ -44,7 +44,7 @@ class AppendParameterTests {
 
     @Test
     fun `appendParameter percent-encodes reserved characters produced by the Stringer`() {
-        // SPECS.md: a Stringer encodes to unescaped text, and the runtime is responsible for
+        // SPECS.adoc: a Stringer encodes to unescaped text, and the runtime is responsible for
         // percent-encoding it - a Stringer that escaped its own output would be double-escaped.
         val fake = AppendParamFakeService()
         val builder = HttpRequestBuilder()

@@ -9,7 +9,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/** SPECS.md § Server processor - the shape of the generated `fun Route.service(...)`, beyond what
+/** SPECS.adoc § Server processor - the shape of the generated `fun Route.service(...)`, beyond what
  * [DemoGoldenTests] already pins down exactly. */
 class ServerGenerationTests {
 

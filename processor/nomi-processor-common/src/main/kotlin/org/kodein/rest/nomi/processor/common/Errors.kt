@@ -233,8 +233,8 @@ public object NomiErrors {
         "service '$name' must not override inherited endpoint '$function' - that would register the same route twice"
 
     // [owner] names whatever registers all these endpoints together on one route tree - a service
-    // interface (SPECS.md § Service declarations) or a `@ServerEndpointService` class implementing
-    // several services at once (SPECS.md § Server implementations) - so the message names it
+    // interface (SPECS.adoc § Service declarations) or a `@ServerEndpointService` class implementing
+    // several services at once (SPECS.adoc § Server implementations) - so the message names it
     // without asserting which kind it is.
     public fun routeCollision(owner: String, a: String, b: String, path: String, method: String): String =
         "'$owner': endpoints '$a' and '$b' both resolve to $method $path"

@@ -14,7 +14,7 @@ import org.kodein.rest.nomi.processor.common.ksp.isNomiResource
 import org.kodein.rest.nomi.processor.common.ksp.isNomiService
 
 /**
- * SPECS.md § General: "Stray annotations are errors." A processor collects every symbol carrying
+ * SPECS.adoc § General: "Stray annotations are errors." A processor collects every symbol carrying
  * one of the four Nomi annotations that decorate something *else* - `@Endpoint`, `@Endpoint.Query`,
  * `@Endpoint.Stringed`, `@Endpoint.UseStringer` - and rejects any it does not consume in that
  * position. The other four Nomi annotations (`@Endpoint.Resource`, `@Endpoint.Service`,
@@ -26,7 +26,7 @@ import org.kodein.rest.nomi.processor.common.ksp.isNomiService
  * declaration carry the right *kind* of Nomi annotation? It never re-validates that enclosing
  * declaration's own shape - that is `ResourceChecks`/`ServiceChecks`'s job, run only when something
  * actually reads it - matching this module's existing "a registration's own shape is validated at
- * discovery, not at use" principle (`processor/README.md`'s Gotchas), applied here to avoid a second
+ * discovery, not at use" principle (`processor/SPECS.adoc`'s Gotchas), applied here to avoid a second
  * code path re-reporting a problem the real analyzers already own.
  *
  * Called once per round by all three processors (shared, server, client) - a real project runs them

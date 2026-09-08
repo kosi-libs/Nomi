@@ -9,7 +9,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/** SPECS.md § Client factories - the per-registration (`serviceClass`, `name`) rules. */
+/** SPECS.adoc § Client factories - the per-registration (`serviceClass`, `name`) rules. */
 class ClientFactoryRegistrationTests {
 
     @Test

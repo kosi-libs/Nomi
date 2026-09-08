@@ -32,7 +32,7 @@ private fun httpMethodMember(method: HttpMethod): MemberName =
 
 /**
  * Renders one [AnalyzedServerService] into the `fun Route.<routeName>(service: <Impl>)` described
- * by SPECS.md § Server processor - one generated file per `@ServerEndpointService` class (unlike
+ * by SPECS.adoc § Server processor - one generated file per `@ServerEndpointService` class (unlike
  * the shared processor's per-source-file grouping), since one such class may implement several
  * services at once and always yields exactly one generated function either way.
  */

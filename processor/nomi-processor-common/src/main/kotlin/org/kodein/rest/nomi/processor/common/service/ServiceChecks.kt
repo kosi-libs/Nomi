@@ -16,7 +16,7 @@ import org.kodein.rest.nomi.processor.common.ksp.fq
 import org.kodein.rest.nomi.processor.common.ksp.isNomiResource
 import org.kodein.rest.nomi.processor.common.ksp.isNomiService
 
-/** SPECS.md § Service declarations. */
+/** SPECS.adoc § Service declarations. */
 public object ServiceChecks {
 
     /** Reports every violation found (never stops at the first) and returns whether [declaration]
@@ -70,7 +70,7 @@ public object ServiceChecks {
         return ok
     }
 
-    // SPECS.md: "top-level, or nested only inside plain declarations — never inside a resource interface".
+    // SPECS.adoc: "top-level, or nested only inside plain declarations — never inside a resource interface".
     private fun checkPlacement(declaration: KSClassDeclaration, name: String, reporter: Reporter): Boolean {
         var ok = true
         var current = declaration.parentDeclaration
@@ -106,7 +106,7 @@ public object ServiceChecks {
         return ok
     }
 
-    /** SPECS.md § Service declarations: "No two endpoints of one service — own or inherited — may
+    /** SPECS.adoc § Service declarations: "No two endpoints of one service — own or inherited — may
      * resolve to the same (path, method) pair." Also reused, unchanged, by `nomi-processor-server`
      * for the analogous § Server implementations rule across every service one
      * `@ServerEndpointService` class implements together. */

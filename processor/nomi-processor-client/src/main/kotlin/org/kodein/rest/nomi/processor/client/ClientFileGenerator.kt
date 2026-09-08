@@ -44,7 +44,7 @@ private fun httpMethodMember(method: HttpMethod): MemberName = MemberName(HTTP_M
 
 /**
  * Renders one `(object, registration, service)` triple into the private implementation + public
- * extension function described by SPECS.md § Client processor - one generated file per
+ * extension function described by SPECS.adoc § Client processor - one generated file per
  * `@ClientEndpointServiceFactory` registration (an object may carry several), since each yields
  * exactly one client implementation and one extension function either way.
  */
@@ -161,7 +161,7 @@ public class ClientFileGenerator(private val codeGenerator: CodeGenerator) {
         return builder.build()
     }
 
-    // SPECS.md § Client processor: "A resource path that mixes literal text and a parameter inside a
+    // SPECS.adoc § Client processor: "A resource path that mixes literal text and a parameter inside a
     // single segment (such as p:{postId}) is rendered as the concatenation of that literal text and
     // the encoded parameter, in a single path segment."
     private fun pathSegmentExpr(segment: PathSegment, paramsByName: Map<String, PathParam>): CodeBlock {

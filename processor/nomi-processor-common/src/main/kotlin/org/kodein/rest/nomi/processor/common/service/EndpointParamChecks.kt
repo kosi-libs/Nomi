@@ -19,10 +19,10 @@ import org.kodein.rest.nomi.processor.common.stringer.Registration
 import org.kodein.rest.nomi.processor.common.stringer.StringerResolver
 
 // The effective query parameter name allows '.' and '-' in addition to IDENTIFIER_REGEX's charset -
-// SPECS.md § Endpoint parameters.
+// SPECS.adoc § Endpoint parameters.
 private val QUERY_NAME_REGEX = Regex("[A-Za-z_][A-Za-z0-9_.-]*")
 
-/** SPECS.md § Endpoint parameters. */
+/** SPECS.adoc § Endpoint parameters. */
 public object EndpointParamChecks {
 
     /** Reports every violation found (never stops at the first) and returns the endpoint's body and
@@ -155,7 +155,7 @@ public object EndpointParamChecks {
         return if (ok) QueryParam(param, paramName, wireName, type, optional, stringer) else null
     }
 
-    // SPECS.md: no two query parameters may resolve to the same effective name, and none may
+    // SPECS.adoc: no two query parameters may resolve to the same effective name, and none may
     // collide with a path parameter along the receiver's resource chain - ktor's `RoutingCall
     // .parameters` merges the two, so such a collision would make the value read at that name
     // ambiguous.

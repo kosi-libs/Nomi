@@ -9,7 +9,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/** SPECS.md § Endpoint return types. */
+/** SPECS.adoc § Endpoint return types. */
 class EndpointReturnTypeTests {
 
     @Test

@@ -12,7 +12,7 @@ import org.kodein.rest.nomi.processor.common.Reporter
 import org.kodein.rest.nomi.processor.common.ksp.expandTypealias
 import org.kodein.rest.nomi.processor.common.ksp.fq
 
-/** SPECS.md § Endpoint return types. */
+/** SPECS.adoc § Endpoint return types. */
 public object ReturnTypeChecks {
 
     /** Returns the endpoint's `(V, E)` type-argument pair, having reported every violation, or
@@ -92,7 +92,7 @@ public object ReturnTypeChecks {
         return true
     }
 
-    // SPECS.md: V and E must be disjoint - neither may be a subtype of the other, and they must not
+    // SPECS.adoc: V and E must be disjoint - neither may be a subtype of the other, and they must not
     // be the same type; Either discriminates value from failure with isInstance at runtime.
     private fun checkDisjoint(function: KSFunctionDeclaration, name: String, valueArg: KSType, errorArg: KSType, reporter: Reporter): Boolean {
         val v = valueArg.makeNotNullable()

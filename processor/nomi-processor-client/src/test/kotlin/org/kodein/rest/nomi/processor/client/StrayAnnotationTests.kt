@@ -9,7 +9,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/** SPECS.md § General: "Stray annotations are errors." Full rule coverage lives in
+/** SPECS.adoc § General: "Stray annotations are errors." Full rule coverage lives in
  * `nomi-processor-server`'s tests (it reads both resources and services); this is a smoke test
  * confirming the client processor's own invocation of the sweep actually runs. */
 class StrayAnnotationTests {

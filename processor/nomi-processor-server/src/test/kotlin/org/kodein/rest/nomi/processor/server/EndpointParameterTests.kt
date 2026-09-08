@@ -9,7 +9,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/** SPECS.md § Endpoint parameters. */
+/** SPECS.adoc § Endpoint parameters. */
 class EndpointParameterTests {
 
     @Test

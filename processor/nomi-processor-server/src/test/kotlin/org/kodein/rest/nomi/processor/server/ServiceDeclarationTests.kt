@@ -10,10 +10,10 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * SPECS.md § Service declarations, exercised through the server processor - see
- * `processor/README.md`'s "Testing strategy": these rules live in `nomi-processor-common` but have
+ * SPECS.adoc § Service declarations, exercised through the server processor - see
+ * `processor/SPECS.adoc`'s "Testing strategy": these rules live in `nomi-processor-common` but have
  * no compiler test harness of their own. The server processor only ever reads a `@Endpoint.Service`
- * interface that some `@ServerEndpointService` class actually implements (SPECS.md § General:
+ * interface that some `@ServerEndpointService` class actually implements (SPECS.adoc § General:
  * "each processor verifies every declaration it reads"), so every fixture below wires one in.
  */
 class ServiceDeclarationTests {

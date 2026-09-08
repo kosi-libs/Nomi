@@ -16,12 +16,12 @@ import org.kodein.rest.nomi.processor.common.service.ServiceAnalyzer
 import org.kodein.rest.nomi.processor.common.service.ServiceChecks
 
 /**
- * Generates the `fun Route.<routeName>(service: <Impl>)` described by SPECS.md § Server processor, for
+ * Generates the `fun Route.<routeName>(service: <Impl>)` described by SPECS.adoc § Server processor, for
  * every `@ServerEndpointService` class. All validation lives in `nomi-processor-common`'s
  * `ServiceAnalyzer` (the `@Endpoint.Service` interfaces it implements) and this module's
  * [ServerServiceChecks] (the class itself) - this class only wires them to a real
  * `Resolver`/`KSPLogger`/`CodeGenerator` and decides, per round, whether to generate anything at
- * all. The server processor re-validates every declaration it reads itself (SPECS.md §
+ * all. The server processor re-validates every declaration it reads itself (SPECS.adoc §
  * Verifications): it never assumes a dependency's shared or client processor already ran.
  */
 public class NomiServerProcessor(

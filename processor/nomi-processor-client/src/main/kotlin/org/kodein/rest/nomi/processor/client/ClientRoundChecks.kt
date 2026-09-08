@@ -7,7 +7,7 @@ import org.kodein.rest.nomi.processor.common.Reporter
 import org.kodein.rest.nomi.processor.common.ksp.fq
 
 /**
- * SPECS.md § Generated-name collisions - the two client-related bullets that need the whole round's
+ * SPECS.adoc § Generated-name collisions - the two client-related bullets that need the whole round's
  * registrations at once, unlike [ClientFactoryChecks]'s per-declaration checks. Mirrors
  * `resource/RoundChecks.kt`'s shape.
  */

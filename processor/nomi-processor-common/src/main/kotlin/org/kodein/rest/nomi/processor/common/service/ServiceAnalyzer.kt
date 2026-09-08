@@ -13,7 +13,7 @@ import org.kodein.rest.nomi.processor.common.resource.ResourceAnalyzer
 import org.kodein.rest.nomi.processor.common.stringer.StringerResolver
 
 /**
- * Analyzes and validates `@Endpoint.Service` interfaces, per SPECS.md § Service declarations,
+ * Analyzes and validates `@Endpoint.Service` interfaces, per SPECS.adoc § Service declarations,
  * § Endpoint functions, § Endpoint parameters and § Endpoint return types. This is the facade
  * `nomi-processor-server` (and later `-client`) call: [analyze] returns `null` for an invalid
  * service, having already reported every violation - never a partially-built [AnalyzedService].
@@ -73,7 +73,7 @@ public class ServiceAnalyzer(private val resolver: Resolver, private val reporte
     private fun analyzeEndpoint(function: KSFunctionDeclaration, declaringService: KSClassDeclaration): AnalyzedEndpoint? {
         val (resource, method) = EndpointChecks.check(function, resourceAnalyzer, resolver, reporter) ?: return null
 
-        // SPECS.md § Stringers: an endpoint's Stringer scope starts at the interface that
+        // SPECS.adoc § Stringers: an endpoint's Stringer scope starts at the interface that
         // *declares* it, not the leaf service being analyzed - an endpoint's wire encoding is
         // fixed where it is written.
         val scopes = stringerResolver.scopesOf(serviceHierarchy(declaringService))

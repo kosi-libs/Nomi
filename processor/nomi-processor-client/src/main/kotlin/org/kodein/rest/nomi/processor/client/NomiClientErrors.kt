@@ -1,7 +1,7 @@
 package org.kodein.rest.nomi.processor.client
 
 /**
- * Every diagnostic message specific to `@ClientEndpointServiceFactory` (SPECS.md § Client factories,
+ * Every diagnostic message specific to `@ClientEndpointServiceFactory` (SPECS.adoc § Client factories,
  * and the client-related bullets of § Generated-name collisions). Everything about the
  * `@Endpoint.Service` interfaces it names lives in `nomi-processor-common`'s `NomiErrors`, since the
  * server processor already reads those same diagnostics.

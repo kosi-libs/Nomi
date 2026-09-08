@@ -9,7 +9,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-// SPECS.md § General - the subset relevant to resources and Stringers. Not exercised here (see
+// SPECS.adoc § General - the subset relevant to resources and Stringers. Not exercised here (see
 // comments at each): expect/actual (needs a multiplatform compilation, kctfork is single-module
 // JVM); inner/const/lateinit/@JvmField on an interface property (not valid Kotlin in that
 // position, so unreachable); a use-site target on @Endpoint.Stringed (its own @Target already

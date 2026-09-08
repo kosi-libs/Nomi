@@ -17,7 +17,7 @@ data class ResourcePath(val segments: List<PathSegment>) {
     override fun toString(): String = segments.joinToString("/")
 }
 
-// SPECS.md § Resource paths - one variant per distinct failure, so a result can report several at once.
+// SPECS.adoc § Resource paths - one variant per distinct failure, so a result can report several at once.
 sealed interface PathError {
     data object Blank : PathError
     data object LeadingSlash : PathError

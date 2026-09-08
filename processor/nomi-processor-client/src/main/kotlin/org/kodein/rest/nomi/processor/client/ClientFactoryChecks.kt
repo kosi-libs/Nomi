@@ -14,7 +14,7 @@ import org.kodein.rest.nomi.processor.common.ksp.isNomiService
 import org.kodein.rest.nomi.processor.common.ksp.stringArg
 import org.kodein.rest.nomi.processor.common.path.IDENTIFIER_REGEX
 
-// SPECS.md: "name must be non-blank, match [A-Za-z_][A-Za-z0-9_]*, and must not be a Kotlin hard
+// SPECS.adoc: "name must be non-blank, match [A-Za-z_][A-Za-z0-9_]*, and must not be a Kotlin hard
 // keyword." Soft keywords (`by`, `get`, `set`, ...) are fine as identifiers, so only the hard set.
 private val HARD_KEYWORDS = setOf(
     "as", "break", "class", "continue", "do", "else", "false", "for", "fun", "if", "in", "interface",
@@ -22,7 +22,7 @@ private val HARD_KEYWORDS = setOf(
     "val", "var", "when", "while",
 )
 
-/** SPECS.md § Client factories. */
+/** SPECS.adoc § Client factories. */
 public object ClientFactoryChecks {
 
     /**

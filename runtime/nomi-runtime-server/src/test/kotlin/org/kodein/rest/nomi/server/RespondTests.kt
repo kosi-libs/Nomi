@@ -116,7 +116,7 @@ class RespondTests {
 
     @Test
     fun `httpError refusing UnprocessableEntity is not caught - it surfaces as a 500`() = testApplication {
-        // 422 is reserved by Nomi (SPECS.md): httpError's own `require` rejects it before an
+        // 422 is reserved by Nomi (SPECS.adoc): httpError's own `require` rejects it before an
         // EndpointStatusCodeException even exists, so respond's catch block never sees it - this
         // is a programmer error, not a business failure.
         application {

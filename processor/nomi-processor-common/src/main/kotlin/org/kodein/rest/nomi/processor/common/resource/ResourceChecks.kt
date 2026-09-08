@@ -24,7 +24,7 @@ private val JVM_ANNOTATIONS_ON_PROPERTIES = listOf(
     "kotlin.jvm.JvmName" to "JvmName",
 )
 
-/** SPECS.md § Resource declarations. */
+/** SPECS.adoc § Resource declarations. */
 public object ResourceChecks {
 
     /** [parent] is the already-analyzed enclosing resource, or null for a root. Reports every

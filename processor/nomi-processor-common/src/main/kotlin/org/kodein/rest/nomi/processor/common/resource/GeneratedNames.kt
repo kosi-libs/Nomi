@@ -1,6 +1,6 @@
 package org.kodein.rest.nomi.processor.common.resource
 
-// SPECS.md § Generated-name collisions: "Nomi" + the simple names of the resource interface and of
+// SPECS.adoc § Generated-name collisions: "Nomi" + the simple names of the resource interface and of
 // every interface or plain declaration it is nested in, outermost first.
 public fun nomiImplName(enclosingSimpleNames: List<String>): String =
     enclosingSimpleNames.joinToString("", prefix = "Nomi")

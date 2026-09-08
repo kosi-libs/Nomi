@@ -9,7 +9,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/** SPECS.md § Verifications: "each processor verifies every declaration it reads, including ones
+/** SPECS.adoc § Verifications: "each processor verifies every declaration it reads, including ones
  * from a dependency module - it never assumes a dependency was already checked by whichever
  * processor built it." A resource and its service are declared and validated in one module (whose
  * shared processor already generated the resource's `Nomi…` implementation); the

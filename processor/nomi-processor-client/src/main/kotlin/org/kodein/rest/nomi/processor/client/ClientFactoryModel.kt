@@ -15,7 +15,7 @@ public class ClientFactoryRegistration(
     public val name: String,
 )
 
-/** SPECS.md § Generated-name collisions: "A client implementation, named `Nomi<Object><Service>Client`,
+/** SPECS.adoc § Generated-name collisions: "A client implementation, named `Nomi<Object><Service>Client`,
  * must be unique per package." Only the object's own *simple* name is used - unlike a resource's
  * generated impl, which concatenates its whole enclosing chain - so two differently-nested objects
  * sharing a simple name is exactly the collision [ClientRoundChecks] must catch. */

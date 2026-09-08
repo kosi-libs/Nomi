@@ -9,9 +9,9 @@ import org.kodein.rest.nomi.processor.common.service.AnalyzedEndpoint
  * (a fully-qualified name), not by rendered path text, walking each endpoint's own
  * [AnalyzedResource.chain] - so a resource with no endpoint of its own but a nested one still gets
  * a node for that nested resource's sake, and two unrelated resources that happen to render the
- * same path text (SPECS.md § Resource paths: explicitly allowed) still get their own, separate
+ * same path text (SPECS.adoc § Resource paths: explicitly allowed) still get their own, separate
  * node, exactly as a resource's own `path.segments` become exactly one `route(){}` call, with a
- * nested resource's own contribution nested inside it - see SPECS.md § Server processor's example.
+ * nested resource's own contribution nested inside it - see SPECS.adoc § Server processor's example.
  */
 public class RouteNode(public val resource: AnalyzedResource?) {
     public val children: LinkedHashMap<String, RouteNode> = LinkedHashMap()
@@ -21,7 +21,7 @@ public class RouteNode(public val resource: AnalyzedResource?) {
 /**
  * Folds [endpoints] into a [RouteNode] tree. Node order is each resource's first appearance across
  * [endpoints]; within one node, [RouteNode.endpoints] keep that same source order and are always
- * rendered before its children - SPECS.md § Server processor: "All of the HTTP method handlers of
+ * rendered before its children - SPECS.adoc § Server processor: "All of the HTTP method handlers of
  * a given path are siblings inside that path's `route {}` block: a handler block must never
  * contain another handler declaration."
  */

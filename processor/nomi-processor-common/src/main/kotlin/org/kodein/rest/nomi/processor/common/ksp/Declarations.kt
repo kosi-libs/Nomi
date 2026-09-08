@@ -13,7 +13,7 @@ import org.kodein.rest.nomi.processor.common.NomiFq
 public fun KSDeclaration.fq(): String = qualifiedName?.asString() ?: simpleName.asString()
 
 /**
- * Resolves a type through any chain of `typealias` expansions (SPECS.md: "resolved to its
+ * Resolves a type through any chain of `typealias` expansions (SPECS.adoc: "resolved to its
  * expansion"), substituting the alias's own type parameters with its use-site arguments along the
  * way - `typealias Ok<V> = Either<V, NoFail>` used as `Ok<UserDetails>` expands to
  * `Either<UserDetails, NoFail>`, not `Either<V, NoFail>` with `V` left dangling. A use-site or

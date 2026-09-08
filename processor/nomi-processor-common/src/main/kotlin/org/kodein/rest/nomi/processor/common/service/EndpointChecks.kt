@@ -38,7 +38,7 @@ private val METHOD_NAMES: Map<String, HttpMethod> = mapOf(
     "delete" to HttpMethod.Delete,
 )
 
-/** SPECS.md § Endpoint functions. */
+/** SPECS.adoc § Endpoint functions. */
 public object EndpointChecks {
 
     /** Reports every violation found (never stops at the first for the function's own independent
@@ -123,7 +123,7 @@ public object EndpointChecks {
         return receiverDecl
     }
 
-    // SPECS.md: "either the resource is declared in the module under compilation, or its Nomi…
+    // SPECS.adoc: "either the resource is declared in the module under compilation, or its Nomi…
     // implementation resolves from a dependency whose shared processor already ran."
     private fun checkReceiverImplAvailable(
         receiver: KSClassDeclaration,
