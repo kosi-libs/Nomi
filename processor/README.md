@@ -6,7 +6,7 @@ Four Gradle modules implement the KSP processors described in `SPECS.md` §"Proc
 nomi-processor-common   analysis & validation only - not a runnable processor
     ↑
     ├── nomi-processor-shared   generates Nomi<Chain> resource impls + factory functions
-    ├── nomi-processor-client   (not yet written)
+    ├── nomi-processor-client   generates a private client impl + public ServiceCaller extension per @ClientEndpointServiceFactory
     └── nomi-processor-server   generates fun Route.service(service: <Impl>) per @ServerEndpointService
 ```
 
@@ -15,13 +15,14 @@ processor needs — `@Endpoint.Resource` and `Stringer` declarations (General, R
 Path parameter types, Resource paths, Stringers, and the resource/factory half of Generated-name
 collisions), plus everything about `@Endpoint.Service` interfaces and the endpoint functions they
 declare (Service declarations, Endpoint functions, Endpoint parameters, Endpoint return types) —
-added once `nomi-processor-server` needed them, and shared as-is once `nomi-processor-client` is
-written, since both read the identical service-side rules. Per that section: *"each processor
-verifies every declaration it reads, including ones from a dependency module — it never assumes a
-dependency was already checked by whichever processor built it."* Only `@ServerEndpointService`'s
-own rules (SPECS.md §"Server implementations") live in `nomi-processor-server` itself; client
-factory rules belong in `nomi-processor-client` once it exists — there's no value in validating
-declarations no processor yet reads.
+added once `nomi-processor-server` needed them, and reused as-is by `nomi-processor-client`, since
+both read the identical service-side rules via the same `ServiceAnalyzer`. Per that section: *"each
+processor verifies every declaration it reads, including ones from a dependency module — it never
+assumes a dependency was already checked by whichever processor built it."* Only
+`@ServerEndpointService`'s own rules (SPECS.md §"Server implementations") live in
+`nomi-processor-server`, and only `@ClientEndpointServiceFactory`'s own rules (SPECS.md §"Client
+factories") live in `nomi-processor-client` — each module validates just the one annotation it
+actually reads.
 
 ## The reusable surface
 
@@ -71,11 +72,13 @@ implements, rather than restating the rule in prose — the rule itself lives in
      `nomi-processor-shared`'s `src/test`.
    - The `@Endpoint.Service`/endpoint-function rule set is exercised end-to-end in
      `nomi-processor-server`'s `src/test` instead, alongside that module's own
-     `@ServerEndpointService` rules — the server processor is the first (and, once
-     `nomi-processor-client` exists, not the only) reader of those declarations, so its tests
-     double as `ServiceAnalyzer`'s proof. Its `ProcessorTestSupport.compile` registers *both*
-     `NomiSharedProcessorProvider` and `NomiServerProcessorProvider`, since a fixture's resources
-     need their `Nomi…` implementations generated in the same round the server processor reads them.
+     `@ServerEndpointService` rules — the server processor was the *first* reader of those
+     declarations, so its tests double as `ServiceAnalyzer`'s proof. `nomi-processor-client`'s own
+     tests deliberately don't re-prove this rule set — they cover only `@ClientEndpointServiceFactory`'s
+     own rules and client-specific codegen, trusting the server processor's tests for everything
+     `ServiceAnalyzer` already validates identically for both. Both processors' `ProcessorTestSupport
+     .compile` register *both* `NomiSharedProcessorProvider` and their own provider, since a
+     fixture's resources need their `Nomi…` implementations generated in the same round.
 
 ## Gotchas
 
@@ -89,15 +92,21 @@ implements, rather than restating the rule in prose — the rule itself lives in
 - **KSP/kctfork version pin**: `kctfork:ksp:0.13.0`'s own POM requests the KSP2 implementation
   artifacts (`symbol-processing-aa-embeddable`, `-common-deps`) a version *older* than
   `symbol-processing-api` in the version catalog. `gradle/libs.versions.toml` pins
-  `ksp-aaEmbeddable` to the same version as `ksp-symbolProcessingApi` to close that gap —
-  `nomi-processor-server`'s `build.gradle.kts` already carries this forward; do the same in
-  `nomi-processor-client` once it adds its own `kctfork` test dependency.
+  `ksp-aaEmbeddable` to the same version as `ksp-symbolProcessingApi` to close that gap — every
+  processor module's `build.gradle.kts` carries this forward via its own `kctfork` test dependency.
 - **A generated function calling an `inline` runtime function needs a matching JVM target.**
-  `nomi-runtime-server`'s `decode`/`decodeOrNull`/`decodeRequired`/`respond` are `inline`, compiled
-  at this project's `jvmToolchain(17)`; a `kctfork` `KotlinCompilation` defaults to a lower JVM
-  target and the Kotlin compiler refuses to inline JVM-17 bytecode into it. Set
-  `jvmTarget = "17"` on the `KotlinCompilation` (see `nomi-processor-server`'s
-  `ProcessorTestSupport.kt`) wherever a processor's generated code calls such a function.
+  `nomi-runtime-server`'s `decode`/`decodeOrNull`/`decodeRequired`/`respond`, and
+  `nomi-runtime-client`'s `call`/`appendParameter`, are `inline`, compiled at this project's
+  `jvmToolchain(17)`; a `kctfork` `KotlinCompilation` defaults to a lower JVM target and the Kotlin
+  compiler refuses to inline JVM-17 bytecode into it. Set `jvmTarget = "17"` on the
+  `KotlinCompilation` (see `nomi-processor-server`/`-client`'s `ProcessorTestSupport.kt`) wherever a
+  processor's generated code calls such a function.
+- **`ParameterizedTypeName`'s companion `get(ClassName, TypeName...)` overloads don't resolve from
+  Kotlin source** in this project's kotlinpoet version, even though they're visible to `javap` —
+  build a generic `TypeName` with the `ClassName.parameterizedBy(...)` extension instead (import
+  `com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy` — it's a *member*
+  extension of the companion object, not a top-level function, so a bare
+  `import com.squareup.kotlinpoet.parameterizedBy` resolves to nothing).
 - **Emitting `context(_: EndpointService)`**: use KotlinPoet's `FunSpec.Builder.contextParameter(ContextParameter(type))`
   (`@ExperimentalKotlinPoetApi`, `ContextParameter(type)` defaults its name to `_`) — never the
   deprecated `contextReceivers(...)`, which emits the old receiver-style syntax and is mutually
