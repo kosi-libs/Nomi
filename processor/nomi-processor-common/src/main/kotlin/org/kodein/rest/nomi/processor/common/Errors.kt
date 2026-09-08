@@ -315,6 +315,9 @@ public object NomiErrors {
     public fun endpointQueryForbiddenType(endpoint: String, type: String): String =
         "endpoint '$endpoint' has a query parameter that must not be $type"
 
+    public fun endpointQueryParameterizedNeedsStringed(endpoint: String, param: String): String =
+        "endpoint '$endpoint' has a parameterized query parameter '$param' and can only be served a Stringer via @Endpoint.Stringed"
+
     public fun endpointQueryNameCollision(endpoint: String, wireName: String): String =
         "endpoint '$endpoint' has two query parameters resolving to the same name '$wireName'"
 

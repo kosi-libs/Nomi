@@ -420,4 +420,50 @@ class EndpointParameterTests {
         assertEquals(KotlinCompilation.ExitCode.COMPILATION_ERROR, result.exitCode)
         assertTrue(result.errors().any { it.contains("Level") && it.contains("less visible") }, result.errors().toString())
     }
+
+    @Test
+    fun `rejects a parameterized query parameter without Endpoint Stringed, accepts one with it`() {
+        val result = compile(
+            SourceFile.kotlin(
+                "endpoints.kt",
+                """
+                package test
+                import org.kodein.rest.nomi.Endpoint
+                import org.kodein.rest.nomi.EndpointService
+                import org.kodein.rest.nomi.Either
+                import org.kodein.rest.nomi.NoFail
+                import org.kodein.rest.nomi.Stringer
+                import org.kodein.rest.nomi.server.ServerEndpointService
+
+                object ListStringer : Stringer<List<Int>> {
+                    override fun encode(value: List<Int>) = value.joinToString(",")
+                    override fun decode(encoded: String) = Either.Companion.value<List<Int>, Stringer.Failure>(encoded.split(",").map { it.toInt() })
+                }
+
+                @Endpoint.Resource
+                interface ResBad
+                @Endpoint.Resource
+                interface ResGood
+
+                @Endpoint.Service
+                interface Svc : EndpointService {
+                    @Endpoint(Endpoint.Method.Get)
+                    suspend fun ResBad.list(@Endpoint.Query ids: List<Int>): Either<Unit, NoFail>
+                    @Endpoint(Endpoint.Method.Get)
+                    suspend fun ResGood.list(@Endpoint.Stringed(ListStringer::class) @Endpoint.Query ids: List<Int>): Either<Unit, NoFail>
+                }
+                @ServerEndpointService("svc")
+                class ServerImpl : Svc {
+                    override suspend fun ResBad.list(ids: List<Int>): Either<Unit, NoFail> = TODO()
+                    override suspend fun ResGood.list(ids: List<Int>): Either<Unit, NoFail> = TODO()
+                }
+                """,
+            ),
+        )
+        assertEquals(KotlinCompilation.ExitCode.COMPILATION_ERROR, result.exitCode)
+        val errors = result.errors()
+        assertTrue(errors.any { it.contains("ids") && it.contains("parameterized") }, errors.toString())
+        assertTrue(errors.none { it.contains("no Stringer resolves") }, errors.toString())
+        assertTrue(errors.none { it.contains("ResGood") }, errors.toString())
+    }
 }

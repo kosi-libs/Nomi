@@ -153,6 +153,12 @@ public object EndpointParamChecks {
         if (!GeneralChecks.checkAtLeastAsVisible(type.declaration, user, reporter)) ok = false
 
         val stringed = param.annotationNamed(NomiFq.STRINGED)
+        if (type.arguments.isNotEmpty() && stringed == null) {
+            // A parameterized type can only be served a Stringer via @Endpoint.Stringed on this
+            // specific parameter: @Endpoint.UseStringer(type = ...) can only name a raw class.
+            reporter.error(param, NomiErrors.endpointQueryParameterizedNeedsStringed(endpointName, paramName))
+            return null
+        }
         val stringer = stringerResolver.resolveFor(param, "$endpointName($paramName)", type, stringed, scopes, user) ?: return null
 
         return if (ok) QueryParam(param, paramName, wireName, type, optional, stringer) else null
