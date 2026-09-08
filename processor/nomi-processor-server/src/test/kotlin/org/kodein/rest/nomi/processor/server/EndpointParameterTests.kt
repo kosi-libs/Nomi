@@ -33,7 +33,7 @@ class EndpointParameterTests {
                     @Endpoint(Endpoint.Method.Post)
                     suspend fun Res.create(a: String, b: String): Either<Unit, NoFail>
                 }
-                @ServerEndpointService
+                @ServerEndpointService("svc")
                 class ServerImpl : Svc {
                     override suspend fun Res.create(a: String, b: String): Either<Unit, NoFail> = TODO()
                 }
@@ -64,7 +64,7 @@ class EndpointParameterTests {
                 interface Svc : EndpointService {
                     suspend fun Res.get(body: String): Either<Unit, NoFail>
                 }
-                @ServerEndpointService
+                @ServerEndpointService("svc")
                 class ServerImpl : Svc {
                     override suspend fun Res.get(body: String): Either<Unit, NoFail> = TODO()
                 }
@@ -98,7 +98,7 @@ class EndpointParameterTests {
                     @Endpoint(Endpoint.Method.Put)
                     suspend fun Res.update(body: String?): Either<Unit, NoFail>
                 }
-                @ServerEndpointService
+                @ServerEndpointService("svc")
                 class ServerImpl : Svc {
                     override suspend fun Res.create(body: String): Either<Unit, NoFail> = TODO()
                     override suspend fun Res.update(body: String?): Either<Unit, NoFail> = TODO()
@@ -141,7 +141,7 @@ class EndpointParameterTests {
                     @Endpoint(Endpoint.Method.Post)
                     suspend fun Res.create(@Endpoint.Stringed(StrStringer::class) body: String): Either<Unit, NoFail>
                 }
-                @ServerEndpointService
+                @ServerEndpointService("svc")
                 class ServerImpl : Svc {
                     override suspend fun Res.create(body: String): Either<Unit, NoFail> = TODO()
                 }
@@ -172,7 +172,7 @@ class EndpointParameterTests {
                 interface Svc : EndpointService {
                     suspend fun Res.get(@Endpoint.Query page: Int = 0): Either<Unit, NoFail>
                 }
-                @ServerEndpointService
+                @ServerEndpointService("svc")
                 class ServerImpl : Svc {
                     override suspend fun Res.get(page: Int): Either<Unit, NoFail> = TODO()
                 }
@@ -203,7 +203,7 @@ class EndpointParameterTests {
                 interface Svc : EndpointService {
                     suspend fun Res.get(@Endpoint.Query page: Int? = 0): Either<Unit, NoFail>
                 }
-                @ServerEndpointService
+                @ServerEndpointService("svc")
                 class ServerImpl : Svc {
                     override suspend fun Res.get(page: Int?): Either<Unit, NoFail> = TODO()
                 }
@@ -233,7 +233,7 @@ class EndpointParameterTests {
                 interface Svc : EndpointService {
                     suspend fun Res.get(@Endpoint.Query a: Any?): Either<Unit, NoFail>
                 }
-                @ServerEndpointService
+                @ServerEndpointService("svc")
                 class ServerImpl : Svc {
                     override suspend fun Res.get(a: Any?): Either<Unit, NoFail> = TODO()
                 }
@@ -271,7 +271,7 @@ class EndpointParameterTests {
                         @Endpoint.Query("x") b: Int?,
                     ): Either<Unit, NoFail>
                 }
-                @ServerEndpointService
+                @ServerEndpointService("svc")
                 class ServerImpl : Svc {
                     override suspend fun Res.get(bad: Int?): Either<Unit, NoFail> = TODO()
                     override suspend fun Res.create(a: Int?, b: Int?): Either<Unit, NoFail> = TODO()
@@ -305,7 +305,7 @@ class EndpointParameterTests {
                 interface Svc : EndpointService {
                     suspend fun Res.get(@Endpoint.Query id: Int? = null): Either<Unit, NoFail>
                 }
-                @ServerEndpointService
+                @ServerEndpointService("svc")
                 class ServerImpl : Svc {
                     override suspend fun Res.get(id: Int?): Either<Unit, NoFail> = TODO()
                 }
@@ -336,7 +336,7 @@ class EndpointParameterTests {
                 interface Svc : EndpointService {
                     suspend fun Res.get(@Endpoint.Query page: Int? = null): Either<Unit, NoFail>
                 }
-                @ServerEndpointService
+                @ServerEndpointService("svc")
                 class ServerImpl : Svc {
                     override suspend fun Res.get(page: Int?): Either<Unit, NoFail> = TODO()
                 }

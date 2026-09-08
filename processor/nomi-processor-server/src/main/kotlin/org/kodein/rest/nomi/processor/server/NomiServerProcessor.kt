@@ -15,12 +15,8 @@ import org.kodein.rest.nomi.processor.common.service.AnalyzedEndpoint
 import org.kodein.rest.nomi.processor.common.service.ServiceAnalyzer
 import org.kodein.rest.nomi.processor.common.service.ServiceChecks
 
-/** `@ServerEndpointService`'s fully-qualified name, as KSP expects it: dotted. Server-only, so it
- * does not belong in `nomi-processor-common`'s `NomiFq`. */
-private const val SERVER_ENDPOINT_SERVICE_FQ = "org.kodein.rest.nomi.server.ServerEndpointService"
-
 /**
- * Generates the `fun Route.service(service: <Impl>)` described by SPECS.md § Server processor, for
+ * Generates the `fun Route.<routeName>(service: <Impl>)` described by SPECS.md § Server processor, for
  * every `@ServerEndpointService` class. All validation lives in `nomi-processor-common`'s
  * `ServiceAnalyzer` (the `@Endpoint.Service` interfaces it implements) and this module's
  * [ServerServiceChecks] (the class itself) - this class only wires them to a real
@@ -68,11 +64,11 @@ public class NomiServerProcessor(
     }
 
     private fun analyzeServerService(declaration: KSClassDeclaration, serviceAnalyzer: ServiceAnalyzer, reporter: Reporter): AnalyzedServerService? {
-        val services = ServerServiceChecks.check(declaration, reporter) ?: return null
+        val result = ServerServiceChecks.check(declaration, reporter) ?: return null
 
         val endpoints = mutableListOf<AnalyzedEndpoint>()
         var ok = true
-        for (service in services) {
+        for (service in result.services) {
             val analyzed = serviceAnalyzer.analyze(service)
             if (analyzed == null) ok = false else endpoints += analyzed.endpoints
         }
@@ -80,6 +76,6 @@ public class NomiServerProcessor(
 
         if (!ServiceChecks.checkRouteCollisions(declaration, endpoints, reporter)) return null
 
-        return AnalyzedServerService(declaration, declaration.visibilityOrNull(), endpoints)
+        return AnalyzedServerService(declaration, declaration.visibilityOrNull(), result.routeName, endpoints)
     }
 }

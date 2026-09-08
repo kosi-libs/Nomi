@@ -35,7 +35,7 @@ class EndpointStringerTests {
                 interface Svc : EndpointService {
                     suspend fun Res.get(@Endpoint.Query name: String): Either<Unit, NoFail>
                 }
-                @ServerEndpointService
+                @ServerEndpointService("svc")
                 class ServerImpl : Svc {
                     override suspend fun Res.get(name: String): Either<Unit, NoFail> = TODO()
                 }
@@ -78,7 +78,7 @@ class EndpointStringerTests {
                 interface Svc : EndpointService {
                     suspend fun Res.get(@Endpoint.Query id: UUID?): Either<Unit, NoFail>
                 }
-                @ServerEndpointService
+                @ServerEndpointService("svc")
                 class ServerImpl : Svc {
                     override suspend fun Res.get(id: UUID?): Either<Unit, NoFail> = TODO()
                 }
@@ -126,7 +126,7 @@ class EndpointStringerTests {
                 @Endpoint.Service
                 interface Derived : Base
 
-                @ServerEndpointService
+                @ServerEndpointService("svc")
                 class ServerImpl : Derived {
                     override suspend fun Res.get(id: UUID?): Either<Unit, NoFail> = TODO()
                 }
@@ -160,7 +160,7 @@ class EndpointStringerTests {
                 interface Svc : EndpointService {
                     suspend fun Res.get(@Endpoint.Query id: UUID?): Either<Unit, NoFail>
                 }
-                @ServerEndpointService
+                @ServerEndpointService("svc")
                 class ServerImpl : Svc {
                     override suspend fun Res.get(id: UUID?): Either<Unit, NoFail> = TODO()
                 }

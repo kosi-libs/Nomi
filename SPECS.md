@@ -266,12 +266,13 @@ A query parameter carries a single value; repeated query parameters are not supp
 ### Server implementation
 
 The user then needs to provide an implementation of each of its services in their server code.
-That implementation class must be annotated with `@ServerEndpointService`.
+That implementation class must be annotated with `@ServerEndpointService`. Its `routeName`
+argument is the name of the generated route function.
 
 The server processor will generate ktor routes for that implementation.
 
 ```kotlin
-@ServerEndpointService
+@ServerEndpointService("users")
 class ServerUsersService : UsersService {
     /*...*/
 }
@@ -506,6 +507,7 @@ legal.
   they would all be registered on the one `Route` this class's generated function builds.
 - Every endpoint it must implement needs its receiver resource's implementation resolvable (see Endpoint functions
   above) and every `Stringer` it needs resolvable (see Stringers above).
+- `routeName` must be non-blank, match `[A-Za-z_][A-Za-z0-9_]*`, and must not be a Kotlin hard keyword.
 
 ### Client factories (`@ClientEndpointServiceFactory`)
 
@@ -599,7 +601,7 @@ The `context(_: EndpointService)` context parameter ensures that a resource can 
 
 ### Server processor
 
-For each `@ServerEndpointService` annotated class, the server processor generates, in the same package, a `fun Route.service(service: <ServiceImplementation>)` function.
+For each `@ServerEndpointService` annotated class, the server processor generates, in the same package, a `fun Route.<routeName>(service: <ServiceImplementation>)` function, named after the annotation's `routeName` argument.
 That function registers all endpoints declared in all `@Endpoint.Service` interfaces this class implements.
 
 For each endpoint, the function generates a nested ktor route and calls the associated service method with:
@@ -614,7 +616,7 @@ lazily — and repeatedly — while serving the outer one.
 Example:
 ```kotlin
 @OptIn(InternalNomiAPI::class)
-fun Route.service(service: ServerUsersService) {
+fun Route.users(service: ServerUsersService) {
     route("/u") {
         get {
             call.respond(service) {
@@ -675,7 +677,7 @@ embeddedServer(
         json(SharedJson)
     }
     routing {
-        service(ServerUsersService())
+        users(ServerUsersService())
     }
 }.start(wait = true)
 ```

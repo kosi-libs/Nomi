@@ -28,10 +28,8 @@ private data class CallerTestFail(val reason: String) : Error
 @OptIn(InternalNomiAPI::class)
 private class FakeEndpointService(
     val client: HttpClient,
-    // Named differently from `buildRequest` on purpose: a real domain service interface (like
-    // ArticlesService in the demo) never exposes this property - only its NomiClientEndpointService
-    // implementation does, under a type the call lambda never sees. Naming it `buildRequest` here
-    // would instead shadow CallBuilder.buildRequest inside the call lambda below.
+    // Named differently from the ServiceCaller.call parameter it's constructed from, purely to
+    // keep "the factory argument" and "the field storing it" visually distinct below.
     val applyBuildRequest: HttpRequestBuilder.() -> Unit,
 ) : EndpointService
 
@@ -104,22 +102,20 @@ class NomiServiceCallerTests {
     }
 
     @Test
-    fun `every registered buildRequest block is applied - in registration order`() = runTest {
+    fun `a buildRequest passed to call is applied to the constructed service`() = runTest {
         val applied = mutableListOf<String>()
         lateinit var createdService: FakeEndpointService
         val caller = NomiServiceCaller(client = dummyClient()) { client, buildRequest ->
             FakeEndpointService(client, buildRequest).also { createdService = it }
         }
 
-        caller.call(NType<Unit>(), NType<CallerTestFail>()) {
-            buildRequest { applied.add("first") }
-            buildRequest { applied.add("second") }
+        caller.call(NType<Unit>(), NType<CallerTestFail>(), buildRequest = { applied.add("applied") }) {
             Either.value(Unit)
         }
 
-        // The service's own buildRequest runs every block the call registered, in order.
+        // The service is constructed with the call's own buildRequest.
         createdService.applyBuildRequest(HttpRequestBuilder())
-        assertEquals(listOf("first", "second"), applied)
+        assertEquals(listOf("applied"), applied)
     }
 
     @Test

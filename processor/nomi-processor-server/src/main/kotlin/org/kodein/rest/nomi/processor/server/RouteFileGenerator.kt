@@ -31,9 +31,9 @@ private fun httpMethodMember(method: HttpMethod): MemberName =
     MemberName("io.ktor.server.routing", method.name.lowercase())
 
 /**
- * Renders one [AnalyzedServerService] into the `fun Route.service(service: <Impl>)` described by
- * SPECS.md § Server processor - one generated file per `@ServerEndpointService` class (unlike the
- * shared processor's per-source-file grouping), since one such class may implement several
+ * Renders one [AnalyzedServerService] into the `fun Route.<routeName>(service: <Impl>)` described
+ * by SPECS.md § Server processor - one generated file per `@ServerEndpointService` class (unlike
+ * the shared processor's per-source-file grouping), since one such class may implement several
  * services at once and always yields exactly one generated function either way.
  */
 public class RouteFileGenerator(private val codeGenerator: CodeGenerator) {
@@ -43,7 +43,7 @@ public class RouteFileGenerator(private val codeGenerator: CodeGenerator) {
         val fileName = "Nomi${server.declaration.simpleName.asString()}Routes"
         val visibility = server.visibility.toKModifier() ?: KModifier.PUBLIC
 
-        val funSpec = FunSpec.builder("service")
+        val funSpec = FunSpec.builder(server.routeName)
             .addAnnotation(AnnotationSpec.builder(OPT_IN).addMember("%T::class", INTERNAL_NOMI_API).build())
             .addModifiers(visibility)
             .receiver(ROUTE_TYPE)

@@ -34,12 +34,12 @@ class NoPartialOutputTests {
                     suspend fun Res.get(): Either<Unit, NoFail>
                 }
 
-                @ServerEndpointService
+                @ServerEndpointService("svc")
                 class Good : Svc {
                     override suspend fun Res.get(): Either<Unit, NoFail> = TODO()
                 }
 
-                @ServerEndpointService
+                @ServerEndpointService("svc")
                 interface Bad : Svc
                 """,
             ),
@@ -73,11 +73,11 @@ class NoPartialOutputTests {
                     suspend fun Res.fetch(): Either<Unit, NoFail>
                 }
 
-                @ServerEndpointService
+                @ServerEndpointService("svc")
                 class ServerA : SvcA {
                     override fun Res.get(): Either<Unit, NoFail> = TODO()
                 }
-                @ServerEndpointService
+                @ServerEndpointService("svc")
                 class ServerB : SvcB {
                     override suspend fun Res.fetch(): Either<Unit, NoFail> = TODO()
                 }

@@ -9,7 +9,7 @@ import org.kodein.rest.nomi.server.ServerEndpointService
 import org.kodein.rest.nomi.server.routingCall
 
 
-@ServerEndpointService
+@ServerEndpointService("tools")
 class ServerToolsService : ToolsService {
     override suspend fun Tools.Headers.get(): Either<List<Pair<String, List<String>>>, NoFail> {
         val headers = routingCall().request.headers.entries().map { it.key to it.value }.toList()

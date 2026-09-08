@@ -21,4 +21,10 @@ public object NomiServerErrors {
 
     public fun noServiceImplemented(name: String): String =
         "@ServerEndpointService '$name' must implement at least one @Endpoint.Service interface, directly or transitively"
+
+    public fun routeNameBlankOrInvalid(name: String, routeName: String): String =
+        "@ServerEndpointService '$name': routeName '$routeName' must be non-blank and match [A-Za-z_][A-Za-z0-9_]*"
+
+    public fun routeNameIsHardKeyword(name: String, routeName: String): String =
+        "@ServerEndpointService '$name': routeName '$routeName' must not be a Kotlin hard keyword"
 }

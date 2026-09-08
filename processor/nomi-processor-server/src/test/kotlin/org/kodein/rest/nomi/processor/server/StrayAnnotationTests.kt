@@ -55,7 +55,7 @@ class StrayAnnotationTests {
                     suspend fun Res.create(content: String): Either<Unit, NoFail>
                 }
 
-                @ServerEndpointService
+                @ServerEndpointService("svc")
                 class ServerImpl : Svc {
                     override suspend fun Res.create(content: String): Either<Unit, NoFail> = TODO()
                 }
@@ -210,7 +210,7 @@ class StrayAnnotationTests {
                     suspend fun Res.get(@Endpoint.Stringed(StrStringer::class) @Endpoint.Query q: String): Either<Unit, NoFail>
                 }
 
-                @ServerEndpointService
+                @ServerEndpointService("svc")
                 class ServerImpl : Svc {
                     override suspend fun Res.get(q: String): Either<Unit, NoFail> = TODO()
                 }

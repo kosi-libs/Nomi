@@ -54,7 +54,7 @@ class CrossModuleTests {
                 import org.kodein.rest.nomi.NoFail
                 import org.kodein.rest.nomi.server.ServerEndpointService
 
-                @ServerEndpointService
+                @ServerEndpointService("svc")
                 class ServerImpl : Svc {
                     override suspend fun Res.get(page: Int?): Either<Unit, NoFail> = TODO()
                 }
@@ -110,7 +110,7 @@ class CrossModuleTests {
                 import org.kodein.rest.nomi.NoFail
                 import org.kodein.rest.nomi.server.ServerEndpointService
 
-                @ServerEndpointService
+                @ServerEndpointService("svc")
                 class ServerImpl : Svc {
                     override suspend fun Res.get(): Either<Unit, NoFail> = TODO()
                 }

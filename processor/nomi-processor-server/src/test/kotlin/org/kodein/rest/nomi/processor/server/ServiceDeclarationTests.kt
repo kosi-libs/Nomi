@@ -32,7 +32,7 @@ class ServiceDeclarationTests {
                 @Endpoint.Service
                 open class NotAnInterface : EndpointService
 
-                @ServerEndpointService
+                @ServerEndpointService("svc")
                 class ServerImpl : NotAnInterface()
                 """,
             ),
@@ -64,7 +64,7 @@ class ServiceDeclarationTests {
                     suspend fun Res.get(): Either<Unit, NoFail>
                 }
 
-                @ServerEndpointService
+                @ServerEndpointService("svc")
                 class ServerFunImpl : FunService {
                     override suspend fun Res.get(): Either<Unit, NoFail> = TODO()
                 }
@@ -92,7 +92,7 @@ class ServiceDeclarationTests {
                     interface NestedService : EndpointService
                 }
 
-                @ServerEndpointService
+                @ServerEndpointService("svc")
                 class ServerImpl : Res.NestedService
                 """,
             ),
@@ -114,7 +114,7 @@ class ServiceDeclarationTests {
                 @Endpoint.Service
                 interface NotAService
 
-                @ServerEndpointService
+                @ServerEndpointService("svc")
                 class ServerImpl : NotAService
                 """,
             ),
@@ -142,9 +142,9 @@ class ServiceDeclarationTests {
                 @Endpoint.Service
                 interface BadService : EndpointService, PlainWithMembers
 
-                @ServerEndpointService
+                @ServerEndpointService("svc")
                 class ServerOk : OkService
-                @ServerEndpointService
+                @ServerEndpointService("svc")
                 class ServerBad : BadService {
                     override suspend fun x() = TODO()
                 }
@@ -171,7 +171,7 @@ class ServiceDeclarationTests {
                 @Endpoint.Service
                 interface Both : EndpointService
 
-                @ServerEndpointService
+                @ServerEndpointService("svc")
                 class ServerImpl : Both
                 """,
             ),
@@ -198,7 +198,7 @@ class ServiceDeclarationTests {
                     typealias Alias = Int
                 }
 
-                @ServerEndpointService
+                @ServerEndpointService("svc")
                 class ServerImpl : BadService {
                     override val prop: Int = 0
                 }
@@ -237,7 +237,7 @@ class ServiceDeclarationTests {
                     override suspend fun Res.get(): Either<Unit, NoFail>
                 }
 
-                @ServerEndpointService
+                @ServerEndpointService("svc")
                 class ServerImpl : Derived {
                     override suspend fun Res.get(): Either<Unit, NoFail> = TODO()
                 }
@@ -262,7 +262,7 @@ class ServiceDeclarationTests {
                 @Endpoint.Service
                 interface EmptyBase : EndpointService
 
-                @ServerEndpointService
+                @ServerEndpointService("svc")
                 class ServerImpl : EmptyBase
                 """,
             ),
@@ -294,7 +294,7 @@ class ServiceDeclarationTests {
                     suspend fun ResB.get(): Either<Unit, NoFail>
                 }
 
-                @ServerEndpointService
+                @ServerEndpointService("svc")
                 class ServerSvc : Svc {
                     override suspend fun ResA.get(): Either<Unit, NoFail> = TODO()
                     override suspend fun ResB.get(): Either<Unit, NoFail> = TODO()

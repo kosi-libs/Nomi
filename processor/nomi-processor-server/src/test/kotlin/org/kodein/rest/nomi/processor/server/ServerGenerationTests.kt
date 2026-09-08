@@ -36,7 +36,7 @@ class ServerGenerationTests {
                     suspend fun Bare.get(): Either<Unit, NoFail>
                     suspend fun WithParam.get(): Either<Unit, NoFail>
                 }
-                @ServerEndpointService
+                @ServerEndpointService("svc")
                 class ServerImpl : Svc {
                     override suspend fun Bare.get(): Either<Unit, NoFail> = TODO()
                     override suspend fun WithParam.get(): Either<Unit, NoFail> = TODO()
@@ -76,7 +76,7 @@ class ServerGenerationTests {
                     suspend fun Parent.get(): Either<Unit, NoFail>
                     suspend fun Parent.Child.get(): Either<Unit, NoFail>
                 }
-                @ServerEndpointService
+                @ServerEndpointService("svc")
                 class ServerImpl : Svc {
                     override suspend fun Parent.get(): Either<Unit, NoFail> = TODO()
                     override suspend fun Parent.Child.get(): Either<Unit, NoFail> = TODO()
@@ -114,7 +114,7 @@ class ServerGenerationTests {
                     suspend fun Res.get(): Either<Unit, NoFail>
                     suspend fun Res.delete(): Either<Unit, NoFail>
                 }
-                @ServerEndpointService
+                @ServerEndpointService("svc")
                 class ServerImpl : Svc {
                     override suspend fun Res.get(): Either<Unit, NoFail> = TODO()
                     override suspend fun Res.delete(): Either<Unit, NoFail> = TODO()
@@ -150,7 +150,7 @@ class ServerGenerationTests {
                     @Endpoint(Endpoint.Method.Post)
                     suspend fun Res.create(content: String): Either<Unit, NoFail>
                 }
-                @ServerEndpointService
+                @ServerEndpointService("svc")
                 class ServerImpl : Svc {
                     override suspend fun Res.create(content: String): Either<Unit, NoFail> = TODO()
                 }
@@ -183,7 +183,7 @@ class ServerGenerationTests {
                 interface Svc : EndpointService {
                     suspend fun Res.get(): Either<Unit, NoFail>
                 }
-                @ServerEndpointService
+                @ServerEndpointService("svc")
                 internal class ServerImpl : Svc {
                     override suspend fun Res.get(): Either<Unit, NoFail> = TODO()
                 }
@@ -192,7 +192,39 @@ class ServerGenerationTests {
         )
         assertEquals(KotlinCompilation.ExitCode.OK, result.exitCode, result.errors().joinToString("\n"))
         val generated = result.generated("NomiServerImplRoutes.kt")
-        assertTrue(generated.contains("internal fun Route.service"), generated)
+        assertTrue(generated.contains("internal fun Route.svc"), generated)
+    }
+
+    @Test
+    fun `the generated route function is named after routeName`() {
+        val result = compile(
+            SourceFile.kotlin(
+                "endpoints.kt",
+                """
+                package test
+                import org.kodein.rest.nomi.Endpoint
+                import org.kodein.rest.nomi.EndpointService
+                import org.kodein.rest.nomi.Either
+                import org.kodein.rest.nomi.NoFail
+                import org.kodein.rest.nomi.server.ServerEndpointService
+
+                @Endpoint.Resource
+                interface Res
+
+                @Endpoint.Service
+                interface Svc : EndpointService {
+                    suspend fun Res.get(): Either<Unit, NoFail>
+                }
+                @ServerEndpointService("myRoutes")
+                class ServerImpl : Svc {
+                    override suspend fun Res.get(): Either<Unit, NoFail> = TODO()
+                }
+                """,
+            ),
+        )
+        assertEquals(KotlinCompilation.ExitCode.OK, result.exitCode, result.errors().joinToString("\n"))
+        val generated = result.generated("NomiServerImplRoutes.kt")
+        assertTrue(generated.contains("fun Route.myRoutes(service: ServerImpl)"), generated)
     }
 
     @Test
@@ -215,11 +247,11 @@ class ServerGenerationTests {
                 interface Svc : EndpointService {
                     suspend fun Res.get(): Either<Unit, NoFail>
                 }
-                @ServerEndpointService
+                @ServerEndpointService("svc")
                 class ServerOne : Svc {
                     override suspend fun Res.get(): Either<Unit, NoFail> = TODO()
                 }
-                @ServerEndpointService
+                @ServerEndpointService("svc")
                 class ServerTwo : Svc {
                     override suspend fun Res.get(): Either<Unit, NoFail> = TODO()
                 }

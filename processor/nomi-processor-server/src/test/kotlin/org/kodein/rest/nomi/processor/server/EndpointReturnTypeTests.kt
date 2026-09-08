@@ -30,7 +30,7 @@ class EndpointReturnTypeTests {
                 interface Svc : EndpointService {
                     suspend fun Res.get(): String
                 }
-                @ServerEndpointService
+                @ServerEndpointService("svc")
                 class ServerImpl : Svc {
                     override suspend fun Res.get(): String = TODO()
                 }
@@ -63,7 +63,7 @@ class EndpointReturnTypeTests {
                 interface Svc : EndpointService {
                     suspend fun Res.get(): Ok<String>
                 }
-                @ServerEndpointService
+                @ServerEndpointService("svc")
                 class ServerImpl : Svc {
                     override suspend fun Res.get(): Ok<String> = TODO()
                 }
@@ -93,7 +93,7 @@ class EndpointReturnTypeTests {
                 interface Svc : EndpointService {
                     suspend fun Res.get(): Either<Unit, NoFail>?
                 }
-                @ServerEndpointService
+                @ServerEndpointService("svc")
                 class ServerImpl : Svc {
                     override suspend fun Res.get(): Either<Unit, NoFail>? = TODO()
                 }
@@ -125,7 +125,7 @@ class EndpointReturnTypeTests {
                     suspend fun Res.get(): Either<Unit, Error>
                     suspend fun Res.delete(): Either<Unit, Nothing>
                 }
-                @ServerEndpointService
+                @ServerEndpointService("svc")
                 class ServerImpl : Svc {
                     override suspend fun Res.get(): Either<Unit, Error> = TODO()
                     override suspend fun Res.delete(): Either<Unit, Nothing> = TODO()
@@ -158,7 +158,7 @@ class EndpointReturnTypeTests {
                 interface Svc : EndpointService {
                     suspend fun Res.get(): Either<Unit, String>
                 }
-                @ServerEndpointService
+                @ServerEndpointService("svc")
                 class ServerImpl : Svc {
                     override suspend fun Res.get(): Either<Unit, String> = TODO()
                 }
@@ -194,7 +194,7 @@ class EndpointReturnTypeTests {
                     @Endpoint(Endpoint.Method.Put)
                     suspend fun Res.update(body: String): Either<Unit?, NoFail>
                 }
-                @ServerEndpointService
+                @ServerEndpointService("svc")
                 class ServerImpl : Svc {
                     override suspend fun Res.get(): Either<Nothing, NoFail> = TODO()
                     override suspend fun Res.delete(): Either<Any, NoFail> = TODO()
@@ -235,7 +235,7 @@ class EndpointReturnTypeTests {
                 interface Svc : EndpointService {
                     suspend fun Res.get(): Either<NoFail, SomeFailure>
                 }
-                @ServerEndpointService
+                @ServerEndpointService("svc")
                 class ServerImpl : Svc {
                     override suspend fun Res.get(): Either<NoFail, SomeFailure> = TODO()
                 }
@@ -269,7 +269,7 @@ class EndpointReturnTypeTests {
                 interface Svc : EndpointService {
                     suspend fun Res.get(): Either<Shared, SharedFailure>
                 }
-                @ServerEndpointService
+                @ServerEndpointService("svc")
                 class ServerImpl : Svc {
                     override suspend fun Res.get(): Either<Shared, SharedFailure> = TODO()
                 }
@@ -301,7 +301,7 @@ class EndpointReturnTypeTests {
                     suspend fun Res.get(): Either<Unit, NoFail>
                     suspend fun Res.delete(): Either<String?, NoFail>
                 }
-                @ServerEndpointService
+                @ServerEndpointService("svc")
                 class ServerImpl : Svc {
                     override suspend fun Res.get(): Either<Unit, NoFail> = TODO()
                     override suspend fun Res.delete(): Either<String?, NoFail> = TODO()

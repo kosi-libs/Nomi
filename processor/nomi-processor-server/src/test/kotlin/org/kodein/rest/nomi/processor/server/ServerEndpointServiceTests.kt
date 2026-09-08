@@ -26,15 +26,15 @@ class ServerEndpointServiceTests {
                 @Endpoint.Service
                 interface Svc : EndpointService
 
-                @ServerEndpointService
+                @ServerEndpointService("svc")
                 interface ServerInterface : Svc
-                @ServerEndpointService
+                @ServerEndpointService("svc")
                 abstract class ServerAbstract : Svc
-                @ServerEndpointService
+                @ServerEndpointService("svc")
                 sealed class ServerSealed : Svc
-                @ServerEndpointService
+                @ServerEndpointService("svc")
                 annotation class ServerAnnotation
-                @ServerEndpointService
+                @ServerEndpointService("svc")
                 enum class ServerEnum
                 """,
             ),
@@ -62,9 +62,9 @@ class ServerEndpointServiceTests {
                 @Endpoint.Service
                 interface Svc : EndpointService
 
-                @ServerEndpointService
+                @ServerEndpointService("svc")
                 class ServerClass : Svc
-                @ServerEndpointService
+                @ServerEndpointService("svc")
                 object ServerObject : Svc
                 """,
             ),
@@ -88,7 +88,7 @@ class ServerEndpointServiceTests {
 
                 @Endpoint.Resource
                 interface Res {
-                    @ServerEndpointService
+                    @ServerEndpointService("svc")
                     class ServerImpl : Svc
                 }
                 """,
@@ -107,7 +107,7 @@ class ServerEndpointServiceTests {
                 package test
                 import org.kodein.rest.nomi.server.ServerEndpointService
 
-                @ServerEndpointService
+                @ServerEndpointService("svc")
                 class ServerImpl
                 """,
             ),
@@ -132,7 +132,7 @@ class ServerEndpointServiceTests {
 
                 interface Intermediate : Svc
 
-                @ServerEndpointService
+                @ServerEndpointService("svc")
                 class ServerImpl : Intermediate
                 """,
             ),
@@ -167,7 +167,7 @@ class ServerEndpointServiceTests {
                     suspend fun ResB.get(): Either<Unit, NoFail>
                 }
 
-                @ServerEndpointService
+                @ServerEndpointService("svc")
                 class ServerImpl : SvcA, SvcB {
                     override suspend fun ResA.get(): Either<Unit, NoFail> = TODO()
                     override suspend fun ResB.get(): Either<Unit, NoFail> = TODO()
@@ -206,7 +206,7 @@ class ServerEndpointServiceTests {
                     suspend fun ResB.get(): Either<Unit, NoFail>
                 }
 
-                @ServerEndpointService
+                @ServerEndpointService("svc")
                 class ServerImpl : SvcA, SvcB {
                     override suspend fun ResA.get(): Either<Unit, NoFail> = TODO()
                     override suspend fun ResB.get(): Either<Unit, NoFail> = TODO()
@@ -218,5 +218,73 @@ class ServerEndpointServiceTests {
         val generated = result.generated("NomiServerImplRoutes.kt")
         assertTrue(generated.contains("\"/a\""), generated)
         assertTrue(generated.contains("\"/b\""), generated)
+    }
+
+    @Test
+    fun `rejects a blank routeName and one with invalid characters`() {
+        val result = compile(
+            SourceFile.kotlin(
+                "endpoints.kt",
+                """
+                package test
+                import org.kodein.rest.nomi.Endpoint
+                import org.kodein.rest.nomi.EndpointService
+                import org.kodein.rest.nomi.server.ServerEndpointService
+
+                @Endpoint.Service
+                interface Svc : EndpointService
+
+                @ServerEndpointService("")
+                class ServerImpl : Svc
+                """,
+            ),
+        )
+        assertEquals(KotlinCompilation.ExitCode.COMPILATION_ERROR, result.exitCode)
+        assertTrue(result.errors().any { it.contains("non-blank and match") }, result.errors().toString())
+    }
+
+    @Test
+    fun `rejects a routeName that is a Kotlin hard keyword`() {
+        val result = compile(
+            SourceFile.kotlin(
+                "endpoints.kt",
+                """
+                package test
+                import org.kodein.rest.nomi.Endpoint
+                import org.kodein.rest.nomi.EndpointService
+                import org.kodein.rest.nomi.server.ServerEndpointService
+
+                @Endpoint.Service
+                interface Svc : EndpointService
+
+                @ServerEndpointService("class")
+                class ServerImpl : Svc
+                """,
+            ),
+        )
+        assertEquals(KotlinCompilation.ExitCode.COMPILATION_ERROR, result.exitCode)
+        assertTrue(result.errors().any { it.contains("hard keyword") }, result.errors().toString())
+    }
+
+    @Test
+    fun `accepts a soft keyword as a routeName`() {
+        val result = compile(
+            SourceFile.kotlin(
+                "endpoints.kt",
+                """
+                package test
+                import org.kodein.rest.nomi.Endpoint
+                import org.kodein.rest.nomi.EndpointService
+                import org.kodein.rest.nomi.server.ServerEndpointService
+
+                @Endpoint.Service
+                interface Svc : EndpointService
+
+                @ServerEndpointService("by")
+                class ServerImpl : Svc
+                """,
+            ),
+        )
+        assertEquals(KotlinCompilation.ExitCode.OK, result.exitCode, result.errors().joinToString("\n"))
     }
 }

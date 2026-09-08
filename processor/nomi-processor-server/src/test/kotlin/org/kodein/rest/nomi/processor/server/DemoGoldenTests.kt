@@ -92,7 +92,7 @@ private val SERVER_FIXTURE = SourceFile.kotlin(
     import org.kodein.rest.nomi.NoFail
     import kotlin.uuid.Uuid
 
-    @ServerEndpointService
+    @ServerEndpointService("articles")
     class ServerArticlesService : ArticlesService {
         override suspend fun Articles.get(page: Int?): Either<List<String>?, NoFail> = TODO()
         override suspend fun Articles.New.create(content: String): Either<Uuid, ArticleCreationFailure> = TODO()
@@ -134,7 +134,7 @@ class DemoGoldenTests {
             import org.kodein.rest.nomi.server.respond
 
             @OptIn(InternalNomiAPI::class)
-            public fun Route.service(service: ServerArticlesService) {
+            public fun Route.articles(service: ServerArticlesService) {
               route("/articles") {
                 `get` {
                   call.respond(service) {

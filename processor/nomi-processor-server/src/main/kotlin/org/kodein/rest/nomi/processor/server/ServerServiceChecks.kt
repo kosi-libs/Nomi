@@ -6,9 +6,22 @@ import com.google.devtools.ksp.symbol.KSClassDeclaration
 import com.google.devtools.ksp.symbol.Modifier
 import org.kodein.rest.nomi.processor.common.Reporter
 import org.kodein.rest.nomi.processor.common.general.GeneralChecks
+import org.kodein.rest.nomi.processor.common.ksp.annotationNamed
 import org.kodein.rest.nomi.processor.common.ksp.fq
 import org.kodein.rest.nomi.processor.common.ksp.isNomiResource
 import org.kodein.rest.nomi.processor.common.ksp.isNomiService
+import org.kodein.rest.nomi.processor.common.ksp.stringArg
+import org.kodein.rest.nomi.processor.common.path.IDENTIFIER_REGEX
+
+// SPECS.md: "routeName must be non-blank, match [A-Za-z_][A-Za-z0-9_]*, and must not be a Kotlin
+// hard keyword." Soft keywords (`by`, `get`, `set`, ...) are fine as identifiers, so only the hard
+// set. Mirrors ClientFactoryChecks' own copy - there's no shared home for it, and each processor
+// validates only the one annotation it reads (see processor/README.md).
+private val HARD_KEYWORDS = setOf(
+    "as", "break", "class", "continue", "do", "else", "false", "for", "fun", "if", "in", "interface",
+    "is", "null", "object", "package", "return", "super", "this", "throw", "true", "try", "typealias",
+    "val", "var", "when", "while",
+)
 
 /**
  * SPECS.md § Server implementations (`@ServerEndpointService`) - the rules specific to the server
@@ -20,13 +33,14 @@ import org.kodein.rest.nomi.processor.common.ksp.isNomiService
 public object ServerServiceChecks {
 
     /**
-     * Reports every violation found and returns the "maximal" `@Endpoint.Service` interfaces
-     * [declaration] implements - direct or transitive, with any service already reachable through
-     * another one in the result filtered out, so [org.kodein.rest.nomi.processor.common.service.ServiceAnalyzer]
-     * (which itself walks a service's own ancestor chain) is never asked to double-count endpoints.
-     * Returns `null` for an invalid class.
+     * Reports every violation found and returns the validated `routeName` alongside the "maximal"
+     * `@Endpoint.Service` interfaces [declaration] implements - direct or transitive, with any
+     * service already reachable through another one in the result filtered out, so
+     * [org.kodein.rest.nomi.processor.common.service.ServiceAnalyzer] (which itself walks a
+     * service's own ancestor chain) is never asked to double-count endpoints. Returns `null` for
+     * an invalid class.
      */
-    public fun check(declaration: KSClassDeclaration, reporter: Reporter): List<KSClassDeclaration>? {
+    public fun check(declaration: KSClassDeclaration, reporter: Reporter): ServerServiceCheckResult? {
         var ok = GeneralChecks.checkReadableDeclaration(declaration, reporter)
         val name = declaration.fq()
 
@@ -50,7 +64,10 @@ public object ServerServiceChecks {
             ok = false
         }
 
-        return if (ok) services else null
+        val routeName = checkRouteName(declaration, name, reporter)
+        if (routeName == null) ok = false
+
+        return if (ok) ServerServiceCheckResult(routeName!!, services) else null
     }
 
     // Mirrors ServiceChecks' own placement rule: never inside a resource; every plain enclosing
@@ -67,6 +84,22 @@ public object ServerServiceChecks {
             current = current.parentDeclaration
         }
         return ok
+    }
+
+    // SPECS.md § Server implementations: routeName's shape rules, mirroring
+    // @ClientEndpointServiceFactory.name's identical ones (ClientFactoryChecks.checkRegistration).
+    private fun checkRouteName(declaration: KSClassDeclaration, name: String, reporter: Reporter): String? {
+        val annotation = declaration.annotationNamed(SERVER_ENDPOINT_SERVICE_FQ) ?: return null
+        val routeName = annotation.stringArg("routeName")
+        if (routeName == null || routeName.isBlank() || !IDENTIFIER_REGEX.matches(routeName)) {
+            reporter.error(annotation, NomiServerErrors.routeNameBlankOrInvalid(name, routeName ?: "?"))
+            return null
+        }
+        if (routeName in HARD_KEYWORDS) {
+            reporter.error(annotation, NomiServerErrors.routeNameIsHardKeyword(name, routeName))
+            return null
+        }
+        return routeName
     }
 
     // The full supertype closure, filtered to @Endpoint.Service interfaces, then filtered again to

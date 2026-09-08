@@ -19,7 +19,7 @@ import org.kodein.rest.nomi.NoFail
 import kotlin.uuid.Uuid
 
 
-@ServerEndpointService
+@ServerEndpointService("articles")
 class ServerArticlesService : ArticlesService {
 
     private val articles = arrayListOf(

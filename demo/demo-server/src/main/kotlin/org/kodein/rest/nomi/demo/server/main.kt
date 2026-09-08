@@ -19,8 +19,8 @@ fun main() {
         }
 
         routing {
-            service(ServerArticlesService())
-            service(ServerToolsService())
+            articles(ServerArticlesService())
+            tools(ServerToolsService())
         }
 
     }.start(wait = true)

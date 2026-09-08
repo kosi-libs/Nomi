@@ -37,7 +37,7 @@ interface ArticlesService : EndpointService {
 .ServerArticlesService.kt
 [source,kotlin]
 ----
-@ServerEndpointService
+@ServerEndpointService("articles")
 class ServerArticlesService : ArticlesService {
     override suspend fun Articles.get(page: Int?): Either<List<ArticleSummary>?, NoFail> = TODO()
     override suspend fun Articles.New.create(content: ArticleContent): Either<Uuid, ArticleCreationFailure> = TODO()
@@ -45,7 +45,7 @@ class ServerArticlesService : ArticlesService {
 }
 
 // Thanks to @ServerEndpointService
-routing { service(ServerArticlesService()) }
+routing { articles(ServerArticlesService()) }
 ----
 
 .main.kt
@@ -605,16 +605,17 @@ Annotate your implementation class:
 .ServerArticlesService.kt
 [source,kotlin]
 ----
-@ServerEndpointService
+@ServerEndpointService("articles")
 class ServerArticlesService : ArticlesService {
     /* ... */
 }
 ----
 
-That class gains a `Route.service(...)` extension registering every endpoint of every service it
-implements — exactly the routes the service resolves to (see <<the-service-interface,The service
-interface>>), each one decoding its own path and query parameters and answering with the status
-codes in <<wire-protocol,Wire protocol>>. You call it once, when mounting the routes (below).
+The `routeName` argument names the generated `Route` extension — `Route.articles(service:
+ServerArticlesService)` here — registering every endpoint of every service the class implements:
+exactly the routes the service resolves to (see <<the-service-interface,The service interface>>),
+each one decoding its own path and query parameters and answering with the status codes in
+<<wire-protocol,Wire protocol>>. You call it once, when mounting the routes (below).
 
 === Inside an endpoint
 
@@ -665,7 +666,7 @@ embeddedServer(
         json(SharedJson)
     }
     routing {
-        service(ServerArticlesService())
+        articles(ServerArticlesService())
     }
 }.start(wait = true)
 ----
@@ -832,7 +833,8 @@ supported target.
 Every declaration Nomi reads — resource, service, `Stringer` object, `@ServerEndpointService`
 class, `@ClientEndpointServiceFactory` object — may be `public` or `internal`. Whichever it is, the
 code the processors generate from it carries the same visibility: an `internal` service gets an
-`internal fun Route.service(...)`, an `internal` resource gets an `internal` factory, and so on.
+`internal Route` extension, named after its `routeName`, an `internal` resource gets an `internal`
+factory, and so on.
 
 == Demo
 
