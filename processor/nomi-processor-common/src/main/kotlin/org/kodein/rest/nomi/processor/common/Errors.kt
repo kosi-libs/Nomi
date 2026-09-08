@@ -32,6 +32,18 @@ public object NomiErrors {
     public fun notVisibleEnough(used: String, by: String): String =
         "'$used' is less visible than '$by', which uses it"
 
+    public fun strayEndpointAnnotation(function: String): String =
+        "@Endpoint on '$function' is a stray annotation - it is not declared inside an @Endpoint.Service interface"
+
+    public fun strayQueryAnnotation(param: String): String =
+        "@Endpoint.Query on parameter '$param' is a stray annotation - it is not a parameter of an endpoint function"
+
+    public fun strayStringedAnnotation(name: String): String =
+        "@Endpoint.Stringed on '$name' is a stray annotation - it is neither a resource path parameter nor an endpoint query parameter"
+
+    public fun strayUseStringerAnnotation(className: String): String =
+        "@Endpoint.UseStringer on '$className' is a stray annotation - it is neither a resource, a service, nor an annotation class"
+
     // --- Resource declarations -----------------------------------------------------------------
 
     public fun resourceNotAnInterface(name: String, kind: String): String =

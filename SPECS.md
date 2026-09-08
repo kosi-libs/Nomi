@@ -322,8 +322,7 @@ unsound.
   implementations and client factory objects are all required to be fully concrete.
 - A `typealias` is resolved to its expansion and verified as that expansion.
 - Every argument to a Nomi annotation must be a compile-time constant KSP can read.
-- **Stray annotations should be errors** *(not yet implemented — needs a whole-module symbol sweep
-  shared by all three processors)*: a processor collects every symbol carrying a Nomi annotation and
+- **Stray annotations are errors.** A processor collects every symbol carrying a Nomi annotation and
   rejects any it does not consume in that position: `@Endpoint` on a function that is not a service
   endpoint; `@Endpoint.Query` on a parameter of a non-endpoint function; `@Endpoint.Stringed` on
   anything other than a resource path parameter or an endpoint query parameter; `@Endpoint.UseStringer`

@@ -10,6 +10,7 @@ import com.google.devtools.ksp.symbol.KSClassDeclaration
 import com.google.devtools.ksp.validate
 import org.kodein.rest.nomi.processor.common.LoggingReporter
 import org.kodein.rest.nomi.processor.common.NomiFq
+import org.kodein.rest.nomi.processor.common.general.StrayAnnotationChecks
 import org.kodein.rest.nomi.processor.common.resource.ResourceAnalyzer
 import org.kodein.rest.nomi.processor.common.resource.RoundChecks
 
@@ -33,6 +34,8 @@ public class NomiSharedProcessor(
         val (notYetResolvable, ready) = symbols.partition { !it.validate() }
 
         val reporter = LoggingReporter(logger)
+        StrayAnnotationChecks.check(resolver, reporter)
+
         val analyzer = ResourceAnalyzer(resolver, reporter)
 
         val declarations = ready.filterIsInstance<KSClassDeclaration>()

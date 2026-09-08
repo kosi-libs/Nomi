@@ -49,6 +49,13 @@ actually reads.
   and `Either<V, E>` return type (`ReturnTypeChecks`) along the way — returning `null`, having
   already reported every violation, for an invalid service. An endpoint's Stringer scope starts at
   the interface that *declares* it, not the leaf service being analyzed (SPECS.md § Stringers).
+- **`StrayAnnotationChecks`** (`general/StrayAnnotationChecks.kt`) implements SPECS.md § General's
+  "Stray annotations are errors" — a purely *positional* sweep, called once per round by all three
+  processors, over every symbol carrying `@Endpoint`, `@Endpoint.Query`, `@Endpoint.Stringed` or
+  `@Endpoint.UseStringer` (the four Nomi annotations that decorate something *else*, rather than
+  being the sole trigger of some processor's own `getSymbolsWithAnnotation` call). It checks only
+  whether the annotated symbol's immediately enclosing declaration carries the right *kind* of Nomi
+  annotation — never that declaration's own shape, which stays `ResourceChecks`/`ServiceChecks`'s job.
 - **`NomiFq`** (`NomiFqNames.kt`) is the one place every Nomi annotation's fully-qualified name is
   written down as a string constant.
 
