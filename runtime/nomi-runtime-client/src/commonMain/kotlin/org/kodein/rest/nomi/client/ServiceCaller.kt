@@ -2,30 +2,21 @@ package org.kodein.rest.nomi.client
 
 import io.ktor.client.*
 import io.ktor.client.request.*
-import org.kodein.rest.nomi.EndpointService
-import org.kodein.rest.nomi.InternalNomiAPI
-import org.kodein.rest.nomi.client.ServiceCaller.CallBuilder
 import org.kodein.rest.nomi.Either
+import org.kodein.rest.nomi.EndpointService
 import org.kodein.rest.nomi.Error
+import org.kodein.rest.nomi.InternalNomiAPI
 import org.kodein.rest.nomi.NType
 import org.kodein.rest.nomi.on
-import kotlin.reflect.KClass
 
 
 public interface ServiceCaller<T : EndpointService> {
-    public interface CallBuilder {
-        public fun buildRequest(block: HttpRequestBuilder.() -> Unit)
-    }
     public suspend fun <S, F : Error> call(
         successType: NType<S>,
         failureType: NType<F>,
-        call: suspend context(CallBuilder) T.() -> Either<S, F>
+        buildRequest: (HttpRequestBuilder.() -> Unit)? = null,
+        call: suspend T.() -> Either<S, F>
     ): CallStatus.Result<S, F>
-}
-
-context(cb: CallBuilder)
-public fun buildRequest(block: HttpRequestBuilder.() -> Unit) {
-    cb.buildRequest(block)
 }
 
 @InternalNomiAPI
@@ -34,25 +25,18 @@ public class NomiServiceCaller<T : EndpointService>(
     private val service: (HttpClient, HttpRequestBuilder.() -> Unit) -> T
 ) : ServiceCaller<T> {
 
-    private class CallBuilderImpl : CallBuilder {
-        val requestBuilders = ArrayList<HttpRequestBuilder.() -> Unit>()
-        override fun buildRequest(block: HttpRequestBuilder.() -> Unit) {
-            requestBuilders.add(block)
-        }
-        fun execute(builder: HttpRequestBuilder) {
-            requestBuilders.forEach { it(builder) }
-        }
-    }
+    private val standardCallService = service(client, {})
 
     override suspend fun <S, F : Error> call(
         successType: NType<S>,
         failureType: NType<F>,
-        call: suspend context(CallBuilder) T.() -> Either<S, F>
+        buildRequest: (HttpRequestBuilder.() -> Unit)?,
+        call: suspend T.() -> Either<S, F>
     ): CallStatus.Result<S, F> {
-        val callBuilder = CallBuilderImpl()
 
         try {
-            return call(callBuilder, service(client) { callBuilder.execute(this) })
+            val service = if (buildRequest != null) service(client, buildRequest) else standardCallService
+            return service.call()
                 .on(
                     valueType = successType,
                     errorType = failureType,
@@ -69,6 +53,22 @@ public class NomiServiceCaller<T : EndpointService>(
 }
 
 public suspend inline fun <T : EndpointService, reified S, reified F : Error> ServiceCaller<T>.call(
-    noinline call: suspend context(CallBuilder) T.() -> Either<S, F>
+    crossinline call: suspend T.() -> Either<S, F>,
+    crossinline buildRequest: HttpRequestBuilder.() -> Unit,
 ): CallStatus.Result<S, F> =
-    call(NType<S>(), NType<F>(), call)
+    call(
+        successType = NType<S>(),
+        failureType = NType<F>(),
+        buildRequest = { buildRequest() },
+        call = { call() }
+    )
+
+public suspend inline fun <T : EndpointService, reified S, reified F : Error> ServiceCaller<T>.call(
+    crossinline call: suspend T.() -> Either<S, F>
+): CallStatus.Result<S, F> =
+    call(
+        successType = NType<S>(),
+        failureType = NType<F>(),
+        buildRequest = null,
+        call = { call() }
+    )

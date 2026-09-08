@@ -640,6 +640,18 @@ private fun getArticle(id: Uuid) =
         ?: httpError(HttpStatusCode.NotFound)
 ----
 
+`routingCall()` reaches everything ktor itself knows about the request — headers, remote host,
+cookies — that isn't already surfaced as a path or query parameter:
+
+.ServerToolsService.kt
+[source,kotlin]
+----
+override suspend fun Tools.Headers.get(): Either<List<Pair<String, List<String>>>, NoFail> {
+    val headers = routingCall().request.headers.entries().map { it.key to it.value }.toList()
+    return value(headers)
+}
+----
+
 === Mounting the routes
 
 .main.kt
@@ -731,9 +743,26 @@ val result = APIServices.articles(client).call {
 ----
 
 The `call { }` block runs with the service as its receiver, so every resource factory and endpoint
-method is in scope directly. It also runs with a `ServiceCaller.CallBuilder` context, whose
-`buildRequest { }` configures the underlying ktor request — headers, authentication — for that one
-call.
+method is in scope directly.
+
+=== Customizing a request
+
+`call` has a second form for the calls that need it, taking the request customization — headers,
+authentication, anything else ktor's `HttpRequestBuilder` exposes — as an extra block, applied to
+that one call only:
+
+.main.kt
+[source,kotlin]
+----
+val result = APIServices.tools(client).call({ Tools().Headers().get() }) {
+    headers {
+        append("X-Nomi-Demo", "Yay!")
+    }
+}
+----
+
+The endpoint call itself moves inside the parentheses here — Kotlin's trailing-lambda syntax always
+binds to the *last* parameter, which is the request customization, not the call.
 
 === `CallStatus`
 

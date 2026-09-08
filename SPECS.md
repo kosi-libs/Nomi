@@ -790,8 +790,15 @@ val result = users.call { Users().get(page = 0) }
 ```
 
 The `call` block runs with the service as its receiver, so that resource factories and endpoint methods are in
-scope. It also runs with a `ServiceCaller.CallBuilder` context, whose `buildRequest { }` configures the underlying
-ktor request (headers, authentication…) for that call.
+scope. `ServiceCaller.call` has a second overload taking an extra `buildRequest: HttpRequestBuilder.() -> Unit`
+block after the call, which configures the underlying ktor request (headers, authentication…) for that one call
+only:
+
+```kotlin
+val result = users.call({ Users().get(page = 0) }) {
+    headers { append("Authorization", "Bearer $token") }
+}
+```
 
 `CallStatus.Result` is one of:
 - `Success(value)`: the endpoint answered `200 OK`.

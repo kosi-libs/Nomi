@@ -20,6 +20,7 @@ fun main() {
 
         routing {
             service(ServerArticlesService())
+            service(ServerToolsService())
         }
 
     }.start(wait = true)
