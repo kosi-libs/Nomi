@@ -228,7 +228,7 @@ The nearest declaration wins, in this order:
    parent services) — the registrations reachable from *that* interface's own annotation tree, shallowest first:
    an `@Endpoint.UseStringer` written directly on it, then one reached through a carrier annotation applied to it,
    then one reached one level deeper, and so on;
-3. the built-in `Stringer` for `Boolean`, `Int` or `Long`, as the final fallback.
+3. the built-in `Stringer` for `Boolean`, `Int`, `Long` or `String`, as the final fallback.
 
 Interface distance always dominates annotation depth: a registration on a nearer interface wins over one on a
 farther interface, whatever their respective depths.
@@ -322,13 +322,16 @@ unsound.
   implementations and client factory objects are all required to be fully concrete.
 - A `typealias` is resolved to its expansion and verified as that expansion.
 - Every argument to a Nomi annotation must be a compile-time constant KSP can read.
-- **Stray annotations are errors.** A processor collects every symbol carrying a Nomi annotation and rejects any it
-  does not consume in that position: `@Endpoint` on a function that is not a service endpoint; `@Endpoint.Query` on a
-  parameter of a non-endpoint function; `@Endpoint.Stringed` on anything other than a resource path parameter or an
-  endpoint query parameter; `@Endpoint.UseStringer` on a class that is neither a resource, a service, nor an
-  annotation class.
-- A use-site target that moves a Nomi annotation off the declaration being read (`@get:Endpoint.Query`,
-  `@field:Endpoint.Stringed`, …) is an error.
+- **Stray annotations should be errors** *(not yet implemented — needs a whole-module symbol sweep
+  shared by all three processors)*: a processor collects every symbol carrying a Nomi annotation and
+  rejects any it does not consume in that position: `@Endpoint` on a function that is not a service
+  endpoint; `@Endpoint.Query` on a parameter of a non-endpoint function; `@Endpoint.Stringed` on
+  anything other than a resource path parameter or an endpoint query parameter; `@Endpoint.UseStringer`
+  on a class that is neither a resource, a service, nor an annotation class.
+- A use-site target that moves a Nomi annotation off the declaration being read (`@get:Endpoint.Stringed`,
+  `@field:Endpoint.Stringed`, …) is an error — reachable only for `@Endpoint.Stringed` on a resource
+  property; a plain function parameter (an endpoint's body or query parameter) has no alternate
+  use-site target to redirect an annotation to.
 
 ### Resource declarations (`@Endpoint.Resource`)
 
@@ -485,7 +488,7 @@ legal.
 - Every rule below applies to the expansion: it must not be a supertype of `Either`, must not be nullable (a
   `typealias` onto a nullable `Either` is still an error), must carry no star projection, and both type arguments
   must be concrete after expansion — never a type parameter.
-- `E` must be a concrete, non-nullable class implementing `Error`; `Error` itself, and `Nothing`, are both errors.
+- `E` must be a concrete, non-nullable type implementing `Error`; `Error` itself, and `Nothing`, are both errors.
 - `V` must not be `Nothing`, `Any`, `Any?` or `Unit?`.
 - **`V` and `E` must be disjoint**: neither may be a subtype of the other, and they must not be the same type.
   `Either` stores one value and discriminates between success and failure with `isInstance` (see `Either.kt`); any
