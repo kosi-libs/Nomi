@@ -79,20 +79,21 @@ public object ResourceChecks {
         val supertypes = declaration.declaredSupertypes()
 
         if (parent == null) {
-            supertypes.firstOrNull()?.let {
-                reporter.error(declaration, NomiErrors.resourceRootHasSupertype(name, it.declaration.qualifiedName?.asString() ?: "?"))
+            for (s in supertypes) {
+                reporter.error(declaration, NomiErrors.resourceRootHasSupertype(name, s.declaration.qualifiedName?.asString() ?: "?"))
                 ok = false
             }
         } else {
             val parentFq = parent.declaration.qualifiedName?.asString()
-            if (supertypes.none { it.declaration.qualifiedName?.asString() == parentFq }) {
+            if (supertypes.isEmpty()) {
                 reporter.error(declaration, NomiErrors.resourceNestedWrongSupertype(name, parent.declaration.fq()))
                 ok = false
-            }
-            for (s in supertypes) {
-                if (s.declaration.qualifiedName?.asString() != parentFq) {
-                    reporter.error(declaration, NomiErrors.resourceExtraSupertype(name, s.declaration.qualifiedName?.asString() ?: "?"))
-                    ok = false
+            } else {
+                for (s in supertypes) {
+                    if (s.declaration.qualifiedName?.asString() != parentFq) {
+                        reporter.error(declaration, NomiErrors.resourceExtraSupertype(name, s.declaration.qualifiedName?.asString() ?: "?"))
+                        ok = false
+                    }
                 }
             }
         }

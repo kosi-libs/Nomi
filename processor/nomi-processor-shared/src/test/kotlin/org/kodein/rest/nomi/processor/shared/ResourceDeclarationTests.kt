@@ -135,6 +135,29 @@ class ResourceDeclarationTests {
     }
 
     @Test
+    fun `reports every supertype of a root resource with more than one`() {
+        val result = compile(
+            SourceFile.kotlin(
+                "endpoints.kt",
+                """
+                package test
+                import org.kodein.rest.nomi.Endpoint
+
+                interface MarkerA
+                interface MarkerB
+
+                @Endpoint.Resource
+                interface Foo : MarkerA, MarkerB
+                """,
+            ),
+        )
+        assertEquals(KotlinCompilation.ExitCode.COMPILATION_ERROR, result.exitCode)
+        val errors = result.errors()
+        assertTrue(errors.any { it.contains("MarkerA") }, errors.toString())
+        assertTrue(errors.any { it.contains("MarkerB") }, errors.toString())
+    }
+
+    @Test
     fun `rejects a resource extending EndpointService or also annotated Endpoint Service`() {
         val result = compile(
             SourceFile.kotlin(
