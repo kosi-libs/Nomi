@@ -311,4 +311,70 @@ class EndpointReturnTypeTests {
         )
         assertEquals(KotlinCompilation.ExitCode.OK, result.exitCode, result.errors().joinToString("\n"))
     }
+
+    @Test
+    fun `rejects a public service whose success type is internal`() {
+        val result = compile(
+            SourceFile.kotlin(
+                "endpoints.kt",
+                """
+                package test
+                import org.kodein.rest.nomi.Endpoint
+                import org.kodein.rest.nomi.EndpointService
+                import org.kodein.rest.nomi.Either
+                import org.kodein.rest.nomi.NoFail
+                import org.kodein.rest.nomi.server.ServerEndpointService
+
+                @Endpoint.Resource
+                interface Res
+
+                internal data class Payload(val value: Int)
+
+                @Endpoint.Service
+                interface Svc : EndpointService {
+                    suspend fun Res.get(): Either<Payload, NoFail>
+                }
+                @ServerEndpointService("svc")
+                class ServerImpl : Svc {
+                    override suspend fun Res.get(): Either<Payload, NoFail> = TODO()
+                }
+                """,
+            ),
+        )
+        assertEquals(KotlinCompilation.ExitCode.COMPILATION_ERROR, result.exitCode)
+        assertTrue(result.errors().any { it.contains("Payload") && it.contains("less visible") }, result.errors().toString())
+    }
+
+    @Test
+    fun `rejects a public service whose failure type is internal`() {
+        val result = compile(
+            SourceFile.kotlin(
+                "endpoints.kt",
+                """
+                package test
+                import org.kodein.rest.nomi.Endpoint
+                import org.kodein.rest.nomi.EndpointService
+                import org.kodein.rest.nomi.Either
+                import org.kodein.rest.nomi.Error
+                import org.kodein.rest.nomi.server.ServerEndpointService
+
+                internal class SomeFailure : Error
+
+                @Endpoint.Resource
+                interface Res
+
+                @Endpoint.Service
+                interface Svc : EndpointService {
+                    suspend fun Res.get(): Either<Unit, SomeFailure>
+                }
+                @ServerEndpointService("svc")
+                class ServerImpl : Svc {
+                    override suspend fun Res.get(): Either<Unit, SomeFailure> = TODO()
+                }
+                """,
+            ),
+        )
+        assertEquals(KotlinCompilation.ExitCode.COMPILATION_ERROR, result.exitCode)
+        assertTrue(result.errors().any { it.contains("SomeFailure") && it.contains("less visible") }, result.errors().toString())
+    }
 }

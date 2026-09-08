@@ -346,4 +346,78 @@ class EndpointParameterTests {
         assertEquals(KotlinCompilation.ExitCode.OK, result.exitCode, result.errors().joinToString("\n"))
         assertTrue(result.generated("NomiServerImplRoutes.kt").contains("\"page\""))
     }
+
+    @Test
+    fun `rejects a public service whose body parameter type is internal`() {
+        val result = compile(
+            SourceFile.kotlin(
+                "endpoints.kt",
+                """
+                package test
+                import org.kodein.rest.nomi.Endpoint
+                import org.kodein.rest.nomi.EndpointService
+                import org.kodein.rest.nomi.Either
+                import org.kodein.rest.nomi.NoFail
+                import org.kodein.rest.nomi.server.ServerEndpointService
+
+                @Endpoint.Resource
+                interface Res
+
+                internal data class Payload(val value: Int)
+
+                @Endpoint.Service
+                interface Svc : EndpointService {
+                    @Endpoint(Endpoint.Method.Post)
+                    suspend fun Res.create(payload: Payload): Either<Unit, NoFail>
+                }
+                @ServerEndpointService("svc")
+                class ServerImpl : Svc {
+                    override suspend fun Res.create(payload: Payload): Either<Unit, NoFail> = TODO()
+                }
+                """,
+            ),
+        )
+        assertEquals(KotlinCompilation.ExitCode.COMPILATION_ERROR, result.exitCode)
+        assertTrue(result.errors().any { it.contains("Payload") && it.contains("less visible") }, result.errors().toString())
+    }
+
+    @Test
+    fun `rejects a public service whose query parameter type is internal`() {
+        val result = compile(
+            SourceFile.kotlin(
+                "endpoints.kt",
+                """
+                package test
+                import org.kodein.rest.nomi.Endpoint
+                import org.kodein.rest.nomi.EndpointService
+                import org.kodein.rest.nomi.Either
+                import org.kodein.rest.nomi.NoFail
+                import org.kodein.rest.nomi.Stringer
+                import org.kodein.rest.nomi.server.ServerEndpointService
+
+                internal enum class Level { LOW, HIGH }
+
+                object LevelStringer : Stringer<Level> {
+                    override fun encode(value: Level): String = value.name
+                    override fun decode(encoded: String): Either<Level, Stringer.Failure> =
+                        Either.Companion.value(Level.valueOf(encoded))
+                }
+
+                @Endpoint.Resource
+                interface Res
+
+                @Endpoint.Service
+                interface Svc : EndpointService {
+                    suspend fun Res.get(@Endpoint.Stringed(LevelStringer::class) @Endpoint.Query level: Level): Either<Unit, NoFail>
+                }
+                @ServerEndpointService("svc")
+                class ServerImpl : Svc {
+                    override suspend fun Res.get(level: Level): Either<Unit, NoFail> = TODO()
+                }
+                """,
+            ),
+        )
+        assertEquals(KotlinCompilation.ExitCode.COMPILATION_ERROR, result.exitCode)
+        assertTrue(result.errors().any { it.contains("Level") && it.contains("less visible") }, result.errors().toString())
+    }
 }

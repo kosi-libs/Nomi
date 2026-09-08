@@ -71,7 +71,7 @@ public class ServiceAnalyzer(private val resolver: Resolver, private val reporte
     }
 
     private fun analyzeEndpoint(function: KSFunctionDeclaration, declaringService: KSClassDeclaration): AnalyzedEndpoint? {
-        val (resource, method) = EndpointChecks.check(function, resourceAnalyzer, resolver, reporter) ?: return null
+        val (resource, method) = EndpointChecks.check(function, declaringService, resourceAnalyzer, resolver, reporter) ?: return null
 
         // SPECS.adoc § Stringers: an endpoint's Stringer scope starts at the interface that
         // *declares* it, not the leaf service being analyzed - an endpoint's wire encoding is
@@ -79,7 +79,7 @@ public class ServiceAnalyzer(private val resolver: Resolver, private val reporte
         val scopes = stringerResolver.scopesOf(serviceHierarchy(declaringService))
 
         val (body, queries) = EndpointParamChecks.check(function, method, resource, scopes, stringerResolver, declaringService, reporter) ?: return null
-        val (valueType, errorType) = ReturnTypeChecks.check(function, reporter) ?: return null
+        val (valueType, errorType) = ReturnTypeChecks.check(function, declaringService, reporter) ?: return null
 
         return AnalyzedEndpoint(function, declaringService, resource, method, body, queries, valueType, errorType)
     }

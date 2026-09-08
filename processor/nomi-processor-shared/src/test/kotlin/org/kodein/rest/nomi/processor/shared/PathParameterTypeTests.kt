@@ -168,4 +168,36 @@ class PathParameterTypeTests {
         assertTrue(errors.any { it.contains("ids") && it.contains("parameterized") }, errors.toString())
         assertTrue(errors.none { it.contains("ResGood") }, errors.toString())
     }
+
+    @Test
+    fun `rejects a public resource with a less visible (internal) path parameter type`() {
+        val result = compile(
+            SourceFile.kotlin(
+                "endpoints.kt",
+                """
+                package test
+                import org.kodein.rest.nomi.Endpoint
+                import org.kodein.rest.nomi.Stringer
+                import org.kodein.rest.nomi.Either
+                import org.kodein.rest.nomi.Either.Companion.value
+
+                internal enum class Level { LOW, HIGH }
+
+                object LevelStringer : Stringer<Level> {
+                    override fun encode(value: Level): String = value.name
+                    override fun decode(encoded: String): Either<Level, Stringer.Failure> = value(Level.valueOf(encoded))
+                }
+
+                @Endpoint.Resource
+                interface Res {
+                    @Endpoint.Stringed(LevelStringer::class)
+                    val level: Level
+                }
+                """,
+            ),
+        )
+        assertEquals(KotlinCompilation.ExitCode.COMPILATION_ERROR, result.exitCode)
+        val errors = result.errors()
+        assertTrue(errors.any { it.contains("Level") && it.contains("less visible") }, errors.toString())
+    }
 }

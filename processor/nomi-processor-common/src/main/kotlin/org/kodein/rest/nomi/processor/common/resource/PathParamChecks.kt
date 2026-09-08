@@ -9,6 +9,7 @@ import com.google.devtools.ksp.symbol.Variance
 import org.kodein.rest.nomi.processor.common.NomiErrors
 import org.kodein.rest.nomi.processor.common.NomiFq
 import org.kodein.rest.nomi.processor.common.Reporter
+import org.kodein.rest.nomi.processor.common.general.GeneralChecks
 import org.kodein.rest.nomi.processor.common.ksp.ARRAY_FQ_NAMES
 import org.kodein.rest.nomi.processor.common.ksp.annotationNamed
 import org.kodein.rest.nomi.processor.common.ksp.expandTypealias
@@ -65,6 +66,7 @@ public object PathParamChecks {
         }
 
         val stringer = stringerResolver.resolveFor(property, property.fq(), type, stringed, scopes, user) ?: return null
+        if (!GeneralChecks.checkAtLeastAsVisible(type.declaration, user, reporter)) return null
         return PathParam(property, name, type, stringer)
     }
 }

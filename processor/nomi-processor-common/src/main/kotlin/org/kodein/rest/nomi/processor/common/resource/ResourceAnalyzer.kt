@@ -91,6 +91,7 @@ public class ResourceAnalyzer(resolver: Resolver, private val reporter: Reporter
         var ok = true
         for (plain in enclosing) {
             if (!GeneralChecks.checkReadableDeclaration(plain, reporter)) ok = false
+            if (!GeneralChecks.checkAtLeastAsVisible(plain, declaration, reporter)) ok = false
             if (plain.isNomiResource()) {
                 reporter.error(declaration, NomiErrors.resourceEnclosedByResource(declaration.fq(), plain.fq()))
                 ok = false

@@ -294,4 +294,35 @@ class EndpointFunctionTests {
         assertEquals(KotlinCompilation.ExitCode.COMPILATION_ERROR, result.exitCode)
         assertTrue(result.errors().any { it.contains("@Endpoint.Resource") }, result.errors().toString())
     }
+
+    @Test
+    fun `rejects a public service whose endpoint receiver resource is internal`() {
+        val result = compile(
+            SourceFile.kotlin(
+                "endpoints.kt",
+                """
+                package test
+                import org.kodein.rest.nomi.Endpoint
+                import org.kodein.rest.nomi.EndpointService
+                import org.kodein.rest.nomi.Either
+                import org.kodein.rest.nomi.NoFail
+                import org.kodein.rest.nomi.server.ServerEndpointService
+
+                @Endpoint.Resource
+                internal interface Res
+
+                @Endpoint.Service
+                interface Svc : EndpointService {
+                    suspend fun Res.get(): Either<Unit, NoFail>
+                }
+                @ServerEndpointService("svc")
+                class ServerImpl : Svc {
+                    override suspend fun Res.get(): Either<Unit, NoFail> = TODO()
+                }
+                """,
+            ),
+        )
+        assertEquals(KotlinCompilation.ExitCode.COMPILATION_ERROR, result.exitCode)
+        assertTrue(result.errors().any { it.contains("Res") && it.contains("less visible") }, result.errors().toString())
+    }
 }

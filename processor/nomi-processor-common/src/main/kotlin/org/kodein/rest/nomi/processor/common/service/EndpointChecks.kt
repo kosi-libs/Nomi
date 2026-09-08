@@ -9,6 +9,7 @@ import com.google.devtools.ksp.symbol.Nullability
 import org.kodein.rest.nomi.processor.common.NomiErrors
 import org.kodein.rest.nomi.processor.common.NomiFq
 import org.kodein.rest.nomi.processor.common.Reporter
+import org.kodein.rest.nomi.processor.common.general.GeneralChecks
 import org.kodein.rest.nomi.processor.common.ksp.annotationNamed
 import org.kodein.rest.nomi.processor.common.ksp.enumArgName
 import org.kodein.rest.nomi.processor.common.ksp.fq
@@ -46,6 +47,7 @@ public object EndpointChecks {
      * and resolved [HttpMethod], or `null` for an invalid endpoint. */
     public fun check(
         function: KSFunctionDeclaration,
+        declaringService: KSClassDeclaration,
         resourceAnalyzer: ResourceAnalyzer,
         resolver: Resolver,
         reporter: Reporter,
@@ -84,6 +86,7 @@ public object EndpointChecks {
 
         val analyzedReceiver = resourceAnalyzer.analyze(receiver) ?: return null
         if (!checkReceiverImplAvailable(receiver, analyzedReceiver, resolver, name, reporter)) return null
+        if (!GeneralChecks.checkAtLeastAsVisible(analyzedReceiver.declaration, declaringService, reporter)) return null
 
         return analyzedReceiver to method!!
     }

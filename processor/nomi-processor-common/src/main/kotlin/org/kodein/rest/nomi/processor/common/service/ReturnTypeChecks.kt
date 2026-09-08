@@ -2,6 +2,7 @@ package org.kodein.rest.nomi.processor.common.service
 
 import com.google.devtools.ksp.getAllSuperTypes
 import com.google.devtools.ksp.symbol.KSClassDeclaration
+import com.google.devtools.ksp.symbol.KSDeclaration
 import com.google.devtools.ksp.symbol.KSFunctionDeclaration
 import com.google.devtools.ksp.symbol.KSType
 import com.google.devtools.ksp.symbol.KSTypeParameter
@@ -9,6 +10,7 @@ import com.google.devtools.ksp.symbol.Variance
 import org.kodein.rest.nomi.processor.common.NomiErrors
 import org.kodein.rest.nomi.processor.common.NomiFq
 import org.kodein.rest.nomi.processor.common.Reporter
+import org.kodein.rest.nomi.processor.common.general.GeneralChecks
 import org.kodein.rest.nomi.processor.common.ksp.expandTypealias
 import org.kodein.rest.nomi.processor.common.ksp.fq
 
@@ -17,7 +19,7 @@ public object ReturnTypeChecks {
 
     /** Returns the endpoint's `(V, E)` type-argument pair, having reported every violation, or
      * `null` for an invalid return type. */
-    public fun check(function: KSFunctionDeclaration, reporter: Reporter): Pair<KSType, KSType>? {
+    public fun check(function: KSFunctionDeclaration, user: KSDeclaration, reporter: Reporter): Pair<KSType, KSType>? {
         val name = function.simpleName.asString()
         val returnRef = function.returnType
         if (returnRef == null) {
@@ -51,6 +53,8 @@ public object ReturnTypeChecks {
         var ok = checkError(function, name, errorArg, reporter)
         ok = checkValue(function, name, valueArg, reporter) && ok
         ok = checkDisjoint(function, name, valueArg, errorArg, reporter) && ok
+        ok = GeneralChecks.checkAtLeastAsVisible(valueArg.declaration, user, reporter) && ok
+        ok = GeneralChecks.checkAtLeastAsVisible(errorArg.declaration, user, reporter) && ok
 
         return if (ok) valueArg to errorArg else null
     }

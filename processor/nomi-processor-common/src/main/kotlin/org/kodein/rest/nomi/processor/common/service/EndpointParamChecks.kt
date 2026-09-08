@@ -9,6 +9,7 @@ import com.google.devtools.ksp.symbol.KSValueParameter
 import org.kodein.rest.nomi.processor.common.NomiErrors
 import org.kodein.rest.nomi.processor.common.NomiFq
 import org.kodein.rest.nomi.processor.common.Reporter
+import org.kodein.rest.nomi.processor.common.general.GeneralChecks
 import org.kodein.rest.nomi.processor.common.ksp.ARRAY_FQ_NAMES
 import org.kodein.rest.nomi.processor.common.ksp.annotationNamed
 import org.kodein.rest.nomi.processor.common.ksp.expandTypealias
@@ -55,7 +56,7 @@ public object EndpointParamChecks {
                     ok = false
                     continue
                 }
-                val checked = checkBody(param, paramName, method, endpointName, reporter)
+                val checked = checkBody(param, paramName, method, user, endpointName, reporter)
                 if (checked == null) ok = false else body = checked
             } else {
                 val checked = checkQuery(param, paramName, queryAnnotation, scopes, stringerResolver, user, endpointName, reporter)
@@ -68,7 +69,7 @@ public object EndpointParamChecks {
         return if (ok) body to queries else null
     }
 
-    private fun checkBody(param: KSValueParameter, paramName: String, method: HttpMethod, endpointName: String, reporter: Reporter): BodyParam? {
+    private fun checkBody(param: KSValueParameter, paramName: String, method: HttpMethod, user: KSDeclaration, endpointName: String, reporter: Reporter): BodyParam? {
         var ok = true
         if (method != HttpMethod.Post && method != HttpMethod.Put && method != HttpMethod.Patch) {
             reporter.error(param, NomiErrors.endpointBodyOnGetOrDelete(endpointName, method.name)); ok = false
@@ -103,6 +104,7 @@ public object EndpointParamChecks {
                 reporter.error(param, NomiErrors.endpointBodyForbiddenType(endpointName, fqName)); ok = false
             }
         }
+        if (!GeneralChecks.checkAtLeastAsVisible(type.declaration, user, reporter)) ok = false
 
         return if (ok) BodyParam(param, paramName, type) else null
     }
@@ -148,6 +150,7 @@ public object EndpointParamChecks {
         if (forbidden != null) {
             reporter.error(param, NomiErrors.endpointQueryForbiddenType(endpointName, forbidden)); return null
         }
+        if (!GeneralChecks.checkAtLeastAsVisible(type.declaration, user, reporter)) ok = false
 
         val stringed = param.annotationNamed(NomiFq.STRINGED)
         val stringer = stringerResolver.resolveFor(param, "$endpointName($paramName)", type, stringed, scopes, user) ?: return null

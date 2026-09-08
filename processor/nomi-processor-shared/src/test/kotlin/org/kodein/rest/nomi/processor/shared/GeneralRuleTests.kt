@@ -107,4 +107,24 @@ class GeneralRuleTests {
         assertEquals(KotlinCompilation.ExitCode.COMPILATION_ERROR, result.exitCode)
         assertTrue(result.errors().any { it.contains("InternalUuidStringer") }, result.errors().toString())
     }
+
+    @Test
+    fun `rejects a public root resource nested inside an internal plain declaration`() {
+        val result = compile(
+            SourceFile.kotlin(
+                "endpoints.kt",
+                """
+                package test
+                import org.kodein.rest.nomi.Endpoint
+
+                internal object Container {
+                    @Endpoint.Resource
+                    interface Res
+                }
+                """,
+            ),
+        )
+        assertEquals(KotlinCompilation.ExitCode.COMPILATION_ERROR, result.exitCode)
+        assertTrue(result.errors().any { it.contains("Container") && it.contains("less visible") }, result.errors().toString())
+    }
 }
