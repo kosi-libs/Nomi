@@ -1,0 +1,881 @@
+= Nomi
+:toc: macro
+:toclevels: 2
+:idprefix:
+:idseparator: -
+:source-highlighter: highlight.js
+
+*Compile-time REST for Kotlin Multiplatform — declare your API once, get both sides.*
+
+Nomi turns plain Kotlin interfaces into a working REST API. You declare _resources_ — nested
+interfaces that are your routes — and _services_ — interfaces whose `suspend` functions are your
+endpoints. A KSP processor generates a ktor server implementation from them; another generates a
+typed ktor client. Both come from the exact same declarations, so they cannot drift apart.
+
+.endpoints.kt
+[source,kotlin]
+----
+@Endpoint.Resource
+interface Articles {
+    @Endpoint.Resource interface New : Articles
+}
+
+@Endpoint.Resource
+interface Article {
+    val articleId: Uuid
+}
+
+@Endpoint.Service
+interface ArticlesService : EndpointService {
+    suspend fun Articles.get(@Endpoint.Query page: Int? = null): Either<List<ArticleSummary>?, NoFail>
+    @Endpoint(Endpoint.Method.Post)
+    suspend fun Articles.New.create(content: ArticleContent): Either<Uuid, ArticleCreationFailure>
+    suspend fun Article.get(): Either<ArticleContent, NoFail>
+}
+----
+
+.ServerArticlesService.kt
+[source,kotlin]
+----
+@ServerEndpointService
+class ServerArticlesService : ArticlesService {
+    override suspend fun Articles.get(page: Int?): Either<List<ArticleSummary>?, NoFail> = TODO()
+    override suspend fun Articles.New.create(content: ArticleContent): Either<Uuid, ArticleCreationFailure> = TODO()
+    override suspend fun Article.get(): Either<ArticleContent, NoFail> = TODO()
+}
+
+// Thanks to @ServerEndpointService
+routing { service(ServerArticlesService()) }
+----
+
+.main.kt
+[source,kotlin]
+----
+@ClientEndpointServiceFactory(ArticlesService::class, "articles")
+object APIServices
+
+// Thanks to @ClientEndpointServiceFactory
+val result = APIServices.articles(client).call {
+    Articles().New().create(ArticleContent(title = "Foo", author = "Me", content = "Bar"))
+}
+----
+
+No reflection, no runtime route table, no hand-written URLs on either side. An interface, two
+generated implementations, and a compiler that rejects a client and server that disagree about the
+API.
+
+toc::[]
+
+== Why Nomi
+
+*One declaration, both sides.* The resource and service interfaces in `commonMain` are the only
+place the API is written down. The server's routes and the client's implementation are both
+generated from them, so a server and a client built against the same declaration can never
+disagree about a path, a method, or a type.
+
+*A route is a type, not a string.* Nesting `@Endpoint.Resource` interfaces _is_ the path
+structure — `Article.Comments` is a route because it is declared inside `Article`. A path
+parameter is a `val` on the interface that owns it, not a placeholder you match against a string
+later.
+
+*A resource can only be built inside a call.* Every generated resource factory carries
+`context(_: EndpointService)`. Writing `Articles()` outside a service's `call { }` block, or
+outside an endpoint implementation, does not compile — there is no such thing as a resource handle
+that outlives the call it addresses.
+
+*Business failures are in the return type.* Every endpoint returns `Either<V, E>`. The server
+answers a failure with `Either.error(...)`; the client receives it back as
+`CallStatus.CallFailure(error)`, typed as the very same `E`. No exception crosses the wire for a
+business outcome — only for things that are actually exceptional (see
+<<configuring-the-httpclient,Configuring the `HttpClient`>>).
+
+*Everything is checked before anything is generated.* A processor validates every declaration it
+reads — including ones from a dependency module — and generates nothing at all for a round in
+which anything it needs is invalid. There is no partial output and no runtime "route not found".
+
+*Serialization stays yours.* Nomi defines the _shape_ of a call — method, path, query parameters,
+status code, whether a body is present — and nothing about the _format_ of that body. It hands the
+value to ktor's `ContentNegotiation` and lets it serialize. JSON, CBOR, ProtoBuf, or anything else
+ktor can negotiate — Nomi never picks.
+
+*Multiplatform client, JVM server.* Resources and services live in a `commonMain` shared between
+every target. The generated client runs on all of them; the generated server runs on ktor-server,
+which is JVM-only.
+
+== Setup
+
+Nomi ships six artifacts:
+
+[cols="2,3",options="header"]
+|===
+| Artifact | Purpose
+
+| `org.kodein.rest.nomi:nomi-runtime-shared`
+| `Either`, `Error`/`NoFail`, `Stringer`, and the `@Endpoint.*` annotations. A normal dependency.
+
+| `org.kodein.rest.nomi:nomi-runtime-client`
+| `ServiceCaller`, `CallStatus`, and the helpers the generated client calls. A normal dependency.
+
+| `org.kodein.rest.nomi:nomi-runtime-server`
+| `httpError`, `routingCall`, and the helpers the generated routes call (ktor-server, JVM only).
+
+| `org.kodein.rest.nomi:nomi-processor-shared`
+| Needed by any module that declares a `@Endpoint.Resource`.
+
+| `org.kodein.rest.nomi:nomi-processor-server`
+| Turns a `@ServerEndpointService` class into ktor routes.
+
+| `org.kodein.rest.nomi:nomi-processor-client`
+| Turns a `@ClientEndpointServiceFactory` object into a `ServiceCaller`.
+|===
+
+=== The shared module
+
+Resources and services are declared in `commonMain`. Run `nomi-processor-shared` once, over the
+common metadata source set, and feed its output back into `commonMain`:
+
+.build.gradle.kts
+[source,kotlin]
+----
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompilationTask
+
+plugins {
+    kotlin("multiplatform")
+    id("com.google.devtools.ksp") // Add the KSP plugin - it hosts the Nomi processors
+}
+
+kotlin {
+    jvm()
+    iosArm64()
+    // ...your targets
+
+    sourceSets {
+        commonMain {
+            // Add the KSP-generated common sources to commonMain. KSP already registers this
+            // directory as an output, but IntelliJ only indexes it as source code if it is also
+            // declared here explicitly.
+            kotlin.srcDir(layout.buildDirectory.dir("generated/ksp/metadata/commonMain/kotlin"))
+            dependencies {
+                // The Nomi shared runtime: annotations, Either, Stringer. A normal dependency.
+                implementation("org.kodein.rest.nomi:nomi-runtime-shared:0.1.0")
+            }
+        }
+    }
+}
+
+dependencies {
+    // Run the Nomi shared processor over the common metadata source set, once, so a single set
+    // of resource implementations is generated for commonMain rather than one per target.
+    add("kspCommonMainMetadata", "org.kodein.rest.nomi:nomi-processor-shared:0.1.0")
+}
+
+// Every compilation - and every per-target KSP task, which also reads commonMain as part of its
+// merged source set even though it has no processor registered - consumes the KSP-generated
+// commonMain sources, so all of them must wait for KSP to run.
+tasks.matching { it.name != "kspCommonMainKotlinMetadata" }.configureEach {
+    if (name.startsWith("ksp") || this is KotlinCompilationTask<*>) {
+        dependsOn("kspCommonMainKotlinMetadata")
+    }
+}
+----
+
+=== The server module
+
+A JVM module depending on the shared module, implementing its services:
+
+.build.gradle.kts
+[source,kotlin]
+----
+plugins {
+    kotlin("jvm")
+    id("com.google.devtools.ksp") // Add the KSP plugin - it hosts the Nomi processors
+}
+
+dependencies {
+    // Your shared module, and the Nomi server runtime: httpError, routingCall.
+    implementation(project(":shared"))
+    implementation("org.kodein.rest.nomi:nomi-runtime-server:0.1.0")
+    // Run the Nomi server processor. KSP wires its generated output into the compilation and
+    // IntelliJ's index automatically here - there's no common metadata source set on a JVM module.
+    ksp("org.kodein.rest.nomi:nomi-processor-server:0.1.0")
+}
+----
+
+=== The client module
+
+A multiplatform module depending on the shared module, wired exactly like the shared module itself
+— its own `kotlin.srcDir` and `tasks.matching` block — but with the client runtime and processor:
+
+.build.gradle.kts
+[source,kotlin]
+----
+kotlin {
+    sourceSets {
+        commonMain {
+            kotlin.srcDir(layout.buildDirectory.dir("generated/ksp/metadata/commonMain/kotlin"))
+            dependencies {
+                implementation(project(":shared"))
+                implementation("org.kodein.rest.nomi:nomi-runtime-client:0.1.0")
+            }
+        }
+    }
+}
+
+dependencies {
+    add("kspCommonMainMetadata", "org.kodein.rest.nomi:nomi-processor-client:0.1.0")
+}
+----
+
+=== Kotlin version
+
+Every generated factory and `ServiceCaller.call` use Kotlin context parameters. This repository
+builds against Kotlin 2.4.10 with no extra compiler flag, so any Kotlin version where context
+parameters are available without an opt-in flag works to consume Nomi.
+
+== Resources
+
+=== Root and nested
+
+A resource interface is annotated `@Endpoint.Resource`. A *root* resource is declared at the top
+level (or nested only inside plain, non-resource declarations that act as a namespace); a *nested*
+resource is declared directly inside the resource interface it extends, and its path is appended
+to its parent's.
+
+.Users.kt
+[source,kotlin]
+----
+@Endpoint.Resource("u") interface Users {
+    @Endpoint.Resource interface New : Users
+    @Endpoint.Resource interface User : Users {
+        val userId: Uuid
+        @Endpoint.Resource interface Posts : User {
+            @Endpoint.Resource("p:{postId}") interface Post : Posts {
+                val postId: Uuid
+            }
+        }
+    }
+}
+----
+
+defines:
+
+----
+/u
+/u/new
+/u/user/{userId}
+/u/user/{userId}/posts
+/u/user/{userId}/posts/p:{postId}
+----
+
+=== Paths
+
+Leave ``@Endpoint.Resource``'s `path` empty and it is *derived*: the interface's simple name, first
+letter lowercased, followed by one segment per own path parameter, in declaration order — that's
+how `User` becomes `user/{userId}` above. Give it an explicit path and it's used as written — `Post`
+above gets no `post/` segment because its annotation names one explicitly, `p:{postId}`, mixing a
+literal prefix with a single placeholder in one segment (`{id}.json` reads the same way, suffix
+instead of prefix).
+
+=== Path parameters
+
+A resource's own path parameters are its abstract, non-nullable `val` properties, each needing a
+`Stringer` (see <<stringers,Stringers>>). A nested resource inherits every path parameter its
+parents declare — `Post` above carries both `userId` and `postId` — but its generated factory
+takes only its *own*: `Users.User.Posts.Post(postId)`, reading `userId` off the receiver.
+
+=== Building a resource
+
+Each resource gets a function named after it, taking that resource's *own* path parameters. A root
+resource's is top-level; a nested one's is an extension on its parent, so a call site reads like
+the route it addresses:
+
+[source,kotlin]
+----
+Articles()                     // /articles
+Articles().New()               // /articles/new
+Article(articleId)             // /article/{articleId}
+Article(articleId).Comments()  // /article/{articleId}/comments
+----
+
+An inherited path parameter is read off the receiver, never passed again — `Comments()` takes
+nothing, because `Article` already carries `articleId`.
+
+These are callable only where an `EndpointService` is in scope: inside a `call { }` block on the
+client, or inside an endpoint implementation on the server. There is nowhere else to build a
+resource, which is what makes <<why-nomi,"a resource can only be built inside a call">> true.
+
+== Services and endpoints
+
+=== The service interface
+
+A service is an interface annotated `@Endpoint.Service`, extending the `EndpointService` marker.
+Each of its `suspend` functions, extending a resource interface, is one endpoint:
+
+.ArticlesService.kt
+[source,kotlin]
+----
+@Endpoint.Service
+interface ArticlesService : EndpointService {
+    suspend fun Articles.get(@Endpoint.Query page: Int? = null): Either<List<ArticleSummary>?, NoFail>
+    @Endpoint(Endpoint.Method.Post)
+    suspend fun Articles.New.create(content: ArticleContent): Either<Uuid, ArticleCreationFailure>
+    suspend fun Article.get(): Either<ArticleContent, NoFail>
+    suspend fun Article.delete(): Either<Unit, NoFail>
+    suspend fun Article.Comments.get(@Endpoint.Query page: Int? = null): Either<List<ArticleComment>?, NoFail>
+    suspend fun Article.Comments.post(comment: ArticleComment): Either<Unit, ArticleCommentFailure>
+}
+----
+
+resolves to:
+
+----
+GET    /articles?page
+POST   /articles/new
+GET    /article/{articleId}
+DELETE /article/{articleId}
+GET    /article/{articleId}/comments?page
+POST   /article/{articleId}/comments
+----
+
+=== The HTTP method
+
+Name the function `get`, `post`, `put`, `patch` or `delete` and that name is the method. Annotate
+it with `@Endpoint(Endpoint.Method.Post)` (or any other `Method`) and the annotation wins instead —
+the function can then be named anything, as `create` is above.
+
+=== The request body
+
+The first parameter, when it carries no `@Endpoint.Query` — `content` in `Articles.New.create`
+above. Only `post`, `put` and `patch` endpoints may declare one.
+
+=== Query parameters
+
+Any other parameter, annotated `@Endpoint.Query`. A *nullable* one is optional: `null` when
+absent, omitted from the URL entirely when its value is `null`, and free to carry any default —
+that default applies purely at the call site. A *non-nullable* one is required: the server answers
+`400 Bad Request` when it's missing. `@Endpoint.Query("p")` gives it a different name on the wire
+than in code.
+
+=== The return type
+
+Always `Either<V, E>` (see <<eithervE,`Either<V, E>`>>) — `V` the success value (`Unit` for none),
+`E` the business failure (`NoFail` for none). `V` and `E` must be different types: `Either` stores
+one value and tells success from failure by checking which type it is an instance of, so an
+overlap between the two would make a failure indistinguishable from a value at runtime. `V` may be
+`Unit`, or nullable — the demo's `get` endpoints return a nullable list to signal "page out of
+range" without a business failure — and either case answers `204 No Content`.
+
+=== Sharing endpoints across services
+
+A service's endpoints are the union of its own and every `@Endpoint.Service` interface it extends,
+however deep. A member-less base interface is the idiomatic place to hang a project-wide
+`@Endpoint.UseStringer` shared by several services (see <<stringers,Stringers>>) — it can declare
+zero endpoints of its own.
+
+[cols="2,2",options="header"]
+|===
+| Declaration | Route
+
+| `suspend fun Res.get(): Either<V, NoFail>`
+| `GET` on ``Res``'s own path.
+
+| `@Endpoint(Endpoint.Method.Post) suspend fun Res.create(body: T): Either<V, E>`
+| `POST`, with `body` as the request body.
+
+| `suspend fun Res.get(@Endpoint.Query page: Int? = null): Either<V, NoFail>`
+| `GET`, with `page` as an optional query parameter.
+
+| `suspend fun Res.get(@Endpoint.Query("p") page: Int): Either<V, NoFail>`
+| `GET`, with a *required* query parameter named `p` on the wire.
+|===
+
+[#eithervE]
+== `Either<V, E>`
+
+The type every endpoint returns. `E` always implements the `Error` marker interface; `NoFail` is
+the built-in `Error` that means "this endpoint has no business failure" — its constructor is
+private, so a value of it can never actually be produced.
+
+NOTE: `Either` is a stopgap. Kotlin has no union types for errors yet, so there is no way to write
+"this returns an `ArticleContent` *or* an ``ArticleCreationFailure``" as a type — `Either` stands in
+for that union until
+https://youtrack.jetbrains.com/issue/KT-68296/Union-Types-for-Errors[KT-68296: Union Types for
+Errors] lands, at which point it will be replaced by a real union type and removed from the
+library. Don't get too attached, and don't build your own abstractions on top of it.
+
+[source,kotlin]
+----
+Either.value(articleSummaries)                    // a success
+Either.error(ArticleCreationFailure.InvalidTitle)  // a business failure
+Either.unit<ArticleCommentFailure>()               // shorthand for Either.value(Unit)
+----
+
+[cols="1,3",options="header"]
+|===
+| Function | Behaviour
+
+| `on(value, error)`
+| Folds both branches down to one result type.
+
+| `valueOr { }`
+| The value, or the block applied to the error.
+
+| `mapValue { }`
+| Transforms `V`, passing an error through unchanged.
+
+| `mapError { }`
+| Transforms `E`, passing a value through unchanged.
+
+| `isValue()` / `isError()`
+| Which branch this `Either` holds.
+
+| `valueOrNull()` / `errorOrNull()`
+| The value/error if this `Either` holds it, else `null`.
+
+| `onValue { }` / `onError { }`
+| Runs a side effect on the matching branch; returns the `Either` unchanged.
+
+| `value()` / `error()`
+| The value/error, throwing if this `Either` holds the other branch.
+|===
+
+Every function above is `inline`, reified over `V`/`E` from the call site. Each also has a plain,
+non-reified overload taking an explicit `NType<V>()`/`NType<E>()`, for the rare call site where the
+type can't be reified. A `when` exhausted over every other `Error` subtype can dispatch the
+impossible `NoFail` case to `it.isImpossible(): Nothing`.
+
+[#stringers]
+== Stringers
+
+Every path parameter and query parameter is a `String` on the wire. A `Stringer<T>` is the two-way
+conversion:
+
+[source,kotlin]
+----
+public interface Stringer<T> {
+    public fun encode(value: T): String
+    public fun decode(encoded: String): Either<T, Stringer.Failure>
+}
+----
+
+Escaping is not a ``Stringer``'s job — the runtime percent-encodes every path segment and query value
+on its way out, and decodes it on the way back in, so `encode`/`decode` always work in *unescaped*
+text.
+
+=== Built-ins
+
+[cols="1,3",options="header"]
+|===
+| Type | Encoding
+
+| `Boolean`
+| `"1"` / `"0"`; also decodes `"true"`/`"false"`.
+
+| `Int`
+| Decimal, via `String.toIntOrNull()`.
+
+| `Long`
+| Decimal, via `String.toLongOrNull()`.
+
+| `String`
+| Passthrough — sent and received unchanged.
+|===
+
+They sit at the lowest priority of the resolution order below, so a project may register its own
+`Stringer` to override one of them, exactly as for any other type.
+
+=== Declaring one
+
+Any other type needs a `Stringer` you write. It must be an `object`:
+
+.Stringers.kt
+[source,kotlin]
+----
+object UuidStringer : Stringer<Uuid> {
+    override fun encode(value: Uuid): String = value.toString()
+    override fun decode(encoded: String): Either<Uuid, Stringer.Failure> =
+        Uuid.parseOrNull(encoded)?.let { Either.value(it) } ?: Either.error(Stringer.Failure("Invalid UUID"))
+}
+----
+
+=== Registering one
+
+Four ways, all equivalent, chosen by how widely the `Stringer` should apply —
+`@Endpoint.UseStringer` is repeatable, so any of the last three can register as many types as you
+need from a single place:
+
+.On the property or query parameter itself
+[source,kotlin]
+----
+@Endpoint.Resource interface Article {
+    @Endpoint.Stringed(with = UuidStringer::class)
+    val articleId: Uuid
+}
+----
+
+.On the resource or service interface
+[source,kotlin]
+----
+@Endpoint.UseStringer(type = Uuid::class, with = UuidStringer::class)
+@Endpoint.Resource interface Article {
+    val articleId: Uuid
+}
+----
+
+.On a parent interface
+[source,kotlin]
+----
+@Endpoint.UseStringer(type = Uuid::class, with = UuidStringer::class)
+@Endpoint.Service interface ServiceBase : EndpointService
+@Endpoint.Service interface ArticlesService : ServiceBase { /* ... */ }
+----
+
+.Through a carrier annotation — the recommended way to share registrations project-wide
+[source,kotlin]
+----
+@Retention(AnnotationRetention.BINARY) // BINARY or RUNTIME - a SOURCE annotation can't resolve
+@Target(AnnotationTarget.CLASS)        // from a dependent module
+@Endpoint.UseStringer(Uuid::class, UuidStringer::class)        // stack one per type -
+@Endpoint.UseStringer(Instant::class, InstantStringer::class)  // @Endpoint.UseStringer repeats
+annotation class UseSharedStringers
+
+@UseSharedStringers
+@Endpoint.Resource interface Article {
+    val articleId: Uuid
+}
+
+@UseSharedStringers
+@Endpoint.Service interface ArticlesService : EndpointService {
+    suspend fun Article.get(@Endpoint.Query since: Instant? = null): Either<ArticleContent, NoFail>
+}
+----
+
+`InstantStringer` here is declared the same way as `UuidStringer` above — one annotation now
+carries every `Stringer` a project shares between its resources and services.
+
+=== Resolution order
+
+The nearest declaration wins:
+
+. `@Endpoint.Stringed` on the property or query parameter itself.
+. Otherwise, the declaring interface and each interface outward — nearest first — checked for an
+  `@Endpoint.UseStringer` reachable from its own annotation tree.
+. Otherwise, the built-in `Stringer` for `Boolean`, `Int`, `Long` or `String`.
+
+Interface distance always dominates annotation depth: a registration on a nearer interface wins
+over one on a farther interface, however many carrier annotations either is reached through.
+
+== Wire protocol
+
+[cols="1,3",options="header"]
+|===
+| Status | When
+
+| `200 OK`
+| A successful call; the body is the serialized `V`.
+
+| `204 No Content`
+| A successful call with nothing to return — `V` is `Unit`, or `V` is nullable and its value is
+  `null`. No body.
+
+| `422 Unprocessable Entity`
+| A business failure; the body is the serialized `E`. Reserved by Nomi: `httpError` refuses this
+  code, and the client reads any *other* non-success status as an HTTP-level error rather than a
+  business failure.
+
+| `400 Bad Request`
+| A path or query parameter's `Stringer` failed to decode it, or a required query parameter was
+  missing. The body is the `Stringer.Failure` reason.
+
+| _(anything else)_
+| Whatever `httpError(code, message)` raised, with `message` as the body when one was given.
+|===
+
+Serialization itself is entirely yours to configure — Nomi never reads or writes a body. Register
+ktor's `ContentNegotiation` with the same format on both the server and the client
+(`json(SharedJson)` throughout this README, because the demo uses JSON; CBOR or anything else ktor
+supports works identically).
+
+== The server
+
+=== `@ServerEndpointService`
+
+Annotate your implementation class:
+
+.ServerArticlesService.kt
+[source,kotlin]
+----
+@ServerEndpointService
+class ServerArticlesService : ArticlesService {
+    /* ... */
+}
+----
+
+That class gains a `Route.service(...)` extension registering every endpoint of every service it
+implements — exactly the routes the service resolves to (see <<the-service-interface,The service
+interface>>), each one decoding its own path and query parameters and answering with the status
+codes in <<wire-protocol,Wire protocol>>. You call it once, when mounting the routes (below).
+
+=== Inside an endpoint
+
+[cols="1,2",options="header"]
+|===
+| Call | Effect
+
+| `Either.error(...)`
+| Answers `422` with the serialized business failure.
+
+| `httpError(code, message)`
+| Aborts with a standard HTTP status — any code but `422`.
+
+| `routingCall()`
+| Reaches the underlying ktor `RoutingCall` for this request.
+|===
+
+.ServerArticlesService.kt
+[source,kotlin]
+----
+private fun getArticle(id: Uuid) =
+    articles.firstOrNull { (articleId) -> articleId == id }
+        ?: httpError(HttpStatusCode.NotFound)
+----
+
+=== Mounting the routes
+
+.main.kt
+[source,kotlin]
+----
+embeddedServer(
+    factory = CIO,
+    port = 8080,
+) {
+    install(ContentNegotiation) {
+        json(SharedJson)
+    }
+    routing {
+        service(ServerArticlesService())
+    }
+}.start(wait = true)
+----
+
+`ContentNegotiation` is not optional — without a converter for the format the client sends, the
+server can neither read a request body nor serialize a response.
+
+== The client
+
+=== `@ClientEndpointServiceFactory`
+
+Annotate an `object`. It's repeatable, so one object can front several services; `name` becomes
+the generated extension function's name:
+
+.APIServices.kt
+[source,kotlin]
+----
+@ClientEndpointServiceFactory(ArticlesService::class, "articles")
+object APIServices
+----
+
+`APIServices.articles(client)` now returns a `ServiceCaller<ArticlesService>` for any ktor
+`HttpClient` you hand it — one function on that object per service it fronts.
+
+[#configuring-the-httpclient]
+=== Configuring the `HttpClient`
+
+Nomi does not create or configure the client — the application sets up three things on it:
+
+.main.kt
+[source,kotlin]
+----
+val client = HttpClient {
+    install(ContentNegotiation) {
+        json(SharedJson)
+    }
+    defaultRequest {
+        url("https://api.example.com/")
+        contentType(ContentType.Application.Json)
+    }
+}
+----
+
+- **`ContentNegotiation`, matching the server's format.** Without it a request with a body fails
+  while being prepared, and a response body fails to be read.
+- **A base URL, in `defaultRequest`, ending in a slash if it carries a path.** This is ordinary URL
+  resolution: `https://api.example.com/v1` treats `v1` as a resource to be replaced, silently
+  dropping it, whereas `https://api.example.com/v1/` keeps it.
+- **A `Content-Type`, in `defaultRequest`.** `ContentNegotiation` picks its converter from the
+  request's content type; without one, every `post`, `put` and `patch` fails before reaching the
+  network.
+
+Get any of this wrong and a call *throws* rather than returning a `CallStatus` — a misconfigured
+client is a programming error, not a call outcome:
+
+[cols="2,2",options="header"]
+|===
+| Mistake | What is raised
+
+| No `ContentNegotiation`, or no `Content-Type`, on a request with a body
+| `IllegalStateException`, from ktor.
+
+| No `ContentNegotiation`, or a format the response doesn't match, when reading a response body
+| `NoTransformationFoundException`, from ktor.
+|===
+
+=== Calling
+
+.main.kt
+[source,kotlin]
+----
+val result = APIServices.articles(client).call {
+    Articles().New().create(ArticleContent(title = "Foo", author = "Me", content = "Bar"))
+}
+----
+
+The `call { }` block runs with the service as its receiver, so every resource factory and endpoint
+method is in scope directly. It also runs with a `ServiceCaller.CallBuilder` context, whose
+`buildRequest { }` configures the underlying ktor request — headers, authentication — for that one
+call.
+
+=== `CallStatus`
+
+`call { }` returns a `CallStatus.Result`:
+
+[cols="1,3",options="header"]
+|===
+| Case | Meaning
+
+| `Success(value)`
+| The endpoint answered `200`/`204`.
+
+| `CallFailure(error)`
+| The endpoint answered `422` with a business failure.
+
+| `ServerFailure(code, body)`
+| The server answered any other non-success status.
+
+| `NetworkFailure(message, cause)`
+| The request never reached the server.
+|===
+
+`CallStatus` additionally carries a `Loading` state, so the same type also models a call still in
+flight in a UI. Two kinds of throwable are deliberately *not* folded into a result: a
+`CancellationException` raised mid-call propagates unchanged (so cancelling the caller's scope
+still cancels it), and so do the client-misconfiguration exceptions above (retrying or handling
+them as a `NetworkFailure` would never fix what's actually wrong).
+
+[cols="1,3",options="header"]
+|===
+| Function | Behaviour
+
+| `successOrNull()`
+| The success value, or `null` for anything else.
+
+| `mapSuccess { }` / `mapFailure { }`
+| Transforms the success/failure payload, passing every other case through unchanged.
+
+| `fakeSuccess()` / `fakeFailure()` / `fake()`
+| Widens a `CallStatus` known never to hold one side (typically after a `NoFail` check) to a
+  broader type — a variance escape hatch, not a runtime check.
+|===
+
+== Supported platforms
+
+`nomi-runtime-shared` and `nomi-runtime-client` are Kotlin Multiplatform libraries targeting:
+
+* *JVM*
+* *iOS* — `iosArm64`, `iosSimulatorArm64`, `iosX64`
+* *watchOS* — `watchosArm32`, `watchosArm64`, `watchosDeviceArm64`, `watchosSimulatorArm64`
+* *tvOS* — `tvosArm64`, `tvosSimulatorArm64`
+* *macOS* — `macosArm64`
+* *Android Native* — `androidNativeArm32`, `androidNativeArm64`, `androidNativeX64`, `androidNativeX86`
+* *Linux* — `linuxX64`, `linuxArm64`
+* *Windows* — `mingwX64`
+* *JS* — browser, Node.js
+* *Wasm/JS* — browser, Node.js
+
+`macosX64` (Intel macOS) is deliberately not a target: Kotlin deprecated it in 2.3.20 and will
+remove it. `iosX64` — the Intel iOS _simulator_, not Intel hardware — is kept because it is still a
+supported target.
+
+`nomi-runtime-server` is JVM-only, built on ktor-server.
+
+== Visibility
+
+Every declaration Nomi reads — resource, service, `Stringer` object, `@ServerEndpointService`
+class, `@ClientEndpointServiceFactory` object — may be `public` or `internal`. Whichever it is, the
+code the processors generate from it carries the same visibility: an `internal` service gets an
+`internal fun Route.service(...)`, an `internal` resource gets an `internal` factory, and so on.
+
+== Demo
+
+`demo/` is a full articles-and-comments API built on Nomi:
+
+[cols="1,3",options="header"]
+|===
+| Module | Contents
+
+| `demo-shared`
+| `Articles`/`Article` resources, `ArticlesService`, `UuidStringer`, and the DTOs.
+
+| `demo-server`
+| `ServerArticlesService`, an in-memory article store, and `main()` starting a ktor server on
+  port 8080.
+
+| `demo-client`
+| A multiplatform client, and `main()` exercising every endpoint against the running server.
+|===
+
+Run ``demo-server``'s `main()` first, then ``demo-client``'s — both are plain `main` functions, run
+from the IDE like any other Kotlin entry point.
+
+== Project layout
+
+[cols="1,3",options="header"]
+|===
+| Module | Contents
+
+| `runtime/nomi-runtime-shared`
+| `Either`, `Error`/`NoFail`, `Stringer`, `@Endpoint.*` annotations. Multiplatform, `explicitApi()`.
+
+| `runtime/nomi-runtime-client`
+| `ServiceCaller`, `CallStatus`, `@ClientEndpointServiceFactory`. Multiplatform, `explicitApi()`.
+
+| `runtime/nomi-runtime-server`
+| `httpError`, `routingCall`, `@ServerEndpointService`. JVM-only (ktor-server), `explicitApi()`.
+
+| `processor/nomi-processor-common`
+| Shared analysis and verification — not a runnable processor.
+
+| `processor/nomi-processor-shared`
+| Needed by any module that declares a `@Endpoint.Resource`.
+
+| `processor/nomi-processor-server`
+| Turns a `@ServerEndpointService` class into ktor routes.
+
+| `processor/nomi-processor-client`
+| Turns a `@ClientEndpointServiceFactory` object into a `ServiceCaller`.
+
+| `demo/*`
+| The articles-and-comments demo — see <<demo,Demo>> above.
+|===
+
+=== Building
+
+[source,bash]
+----
+./gradlew build                                     # everything
+./gradlew :processor:nomi-processor-shared:test      # shared processor's own tests
+./gradlew :processor:nomi-processor-server:test      # server processor's own tests
+./gradlew :processor:nomi-processor-client:test      # client processor's own tests
+----
+
+Processor tests compile fixture sources in-memory through the real processor with
+https://github.com/ZacSweers/kotlin-compile-testing[kotlin-compile-testing] and assert on the
+generated output.
+
+== License
+
+Nomi is released under the MIT License.
+
+----
+Copyright (c) 2026 Salomon BRYS
+----
