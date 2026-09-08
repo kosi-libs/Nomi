@@ -249,6 +249,40 @@ class ServiceDeclarationTests {
     }
 
     @Test
+    fun `an Any-member override is rejected as a malformed endpoint, not as a route collision`() {
+        val result = compile(
+            SourceFile.kotlin(
+                "endpoints.kt",
+                """
+                package test
+                import org.kodein.rest.nomi.Endpoint
+                import org.kodein.rest.nomi.EndpointService
+                import org.kodein.rest.nomi.Either
+                import org.kodein.rest.nomi.NoFail
+                import org.kodein.rest.nomi.server.ServerEndpointService
+
+                @Endpoint.Resource
+                interface Res
+
+                @Endpoint.Service
+                interface Svc : EndpointService {
+                    override fun toString(): String = "Svc"
+                    suspend fun Res.get(): Either<Unit, NoFail>
+                }
+                @ServerEndpointService("svc")
+                class ServerImpl : Svc {
+                    override suspend fun Res.get(): Either<Unit, NoFail> = TODO()
+                }
+                """,
+            ),
+        )
+        assertEquals(KotlinCompilation.ExitCode.COMPILATION_ERROR, result.exitCode)
+        val errors = result.errors()
+        assertTrue(errors.none { it.contains("register the same route twice") }, errors.toString())
+        assertTrue(errors.any { it.contains("toString") }, errors.toString())
+    }
+
+    @Test
     fun `a service declaring zero endpoints is legal`() {
         val result = compile(
             SourceFile.kotlin(

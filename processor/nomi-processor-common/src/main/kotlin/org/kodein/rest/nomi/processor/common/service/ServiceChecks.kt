@@ -61,7 +61,8 @@ public object ServiceChecks {
             ok = false
         }
         for (function in declaration.getDeclaredFunctions()) {
-            if (function.findOverridee() != null) {
+            val overriddenService = function.findOverridee()?.parentDeclaration as? KSClassDeclaration
+            if (overriddenService != null && overriddenService.isNomiService()) {
                 reporter.error(function, NomiErrors.serviceEndpointOverrides(name, function.simpleName.asString()))
                 ok = false
             }
