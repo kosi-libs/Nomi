@@ -21,6 +21,15 @@ import kotlin.coroutines.CoroutineContext
 @PublishedApi
 internal class EndpointStatusCodeException(val code: HttpStatusCode, message: String?) : LightException(message)
 
+/**
+ * Aborts the endpoint with a plain HTTP status: the client reads it back as a
+ * `CallStatus.ServerFailure`, with [message] as the response body when one is given.
+ *
+ * Callable only from inside an endpoint implementation, which is what the [EndpointService] context
+ * enforces. [code] must not be `422 Unprocessable Entity`: Nomi reserves that status for the
+ * business failure an endpoint returns as its `Either`'s error (README.adoc § Wire protocol), so
+ * passing it fails instead.
+ */
 context(_: EndpointService)
 public fun httpError(code: HttpStatusCode, message: String? = null): Nothing {
     require(code != HttpStatusCode.UnprocessableEntity) { "Cannot use UnprocessableEntity as an error code as it is reserved by Nomi." }
@@ -33,6 +42,14 @@ internal class RoutingCallElement(val call: RoutingCall) : CoroutineContext.Elem
     companion object Key : CoroutineContext.Key<RoutingCallElement>
 }
 
+/**
+ * The ktor [RoutingCall] behind the endpoint currently running: headers, remote host, cookies -
+ * everything about the request that Nomi does not already surface as a path or query parameter.
+ *
+ * Callable only from inside an endpoint implementation, which is what the [EndpointService] context
+ * enforces; it reads the call from the coroutine context the generated route puts it in, and so
+ * fails if called from a coroutine that does not inherit that context.
+ */
 context(_: EndpointService)
 public suspend fun routingCall(): RoutingCall =
     currentCoroutineContext()[RoutingCallElement]?.call
