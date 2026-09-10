@@ -33,7 +33,7 @@ sealed interface ArticleCreationFailure : Error {
 }
 
 @Serializable
-sealed interface ArticleCommentFailure : Error {
-    @Serializable data object InvalidAuthor : ArticleCommentFailure
-    @Serializable data object InvalidContent : ArticleCommentFailure
+sealed interface ArticleCommentPostFailure : Error {
+    @Serializable data object InvalidAuthor : ArticleCommentPostFailure
+    @Serializable data object InvalidContent : ArticleCommentPostFailure
 }

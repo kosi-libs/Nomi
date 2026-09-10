@@ -37,5 +37,5 @@ interface ArticlesService : EndpointService {
 
     suspend fun Article.Comments.get(@Endpoint.Query page: Int? = null): Either<List<ArticleComment>?, NoFail>
 
-    suspend fun Article.Comments.post(comment: ArticleComment): Either<Unit, ArticleCommentFailure>
+    suspend fun Article.Comments.post(comment: ArticleComment): Either<Unit, ArticleCommentPostFailure>
 }

@@ -3,7 +3,7 @@ package org.kodein.rest.nomi.demo.server
 import io.ktor.http.*
 import org.kodein.rest.nomi.demo.shared.Article
 import org.kodein.rest.nomi.demo.shared.ArticleComment
-import org.kodein.rest.nomi.demo.shared.ArticleCommentFailure
+import org.kodein.rest.nomi.demo.shared.ArticleCommentPostFailure
 import org.kodein.rest.nomi.demo.shared.ArticleContent
 import org.kodein.rest.nomi.demo.shared.ArticleCreationFailure
 import org.kodein.rest.nomi.demo.shared.ArticleSummary
@@ -82,9 +82,9 @@ class ServerArticlesService : ArticlesService {
         return value(comments)
     }
 
-    override suspend fun Article.Comments.post(comment: ArticleComment): Either<Unit, ArticleCommentFailure> {
-        if (comment.author.isBlank()) return error(ArticleCommentFailure.InvalidAuthor)
-        if (comment.content.isBlank()) return error(ArticleCommentFailure.InvalidContent)
+    override suspend fun Article.Comments.post(comment: ArticleComment): Either<Unit, ArticleCommentPostFailure> {
+        if (comment.author.isBlank()) return error(ArticleCommentPostFailure.InvalidAuthor)
+        if (comment.content.isBlank()) return error(ArticleCommentPostFailure.InvalidContent)
         val (_, _, comments) = getArticle(articleId)
         comments.add(comment)
         return unit()

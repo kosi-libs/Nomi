@@ -1,8 +1,21 @@
 package org.kodein.rest.nomi.client
 
 import io.ktor.http.*
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flatMapMerge
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.launch
 import org.kodein.rest.nomi.Error
 import org.kodein.rest.nomi.NoFail
+import org.kodein.rest.nomi.client.callChain
 import org.kodein.rest.nomi.isImpossible
 
 
@@ -80,133 +93,131 @@ public fun <S, F : Error> CallStatus.Failure<*, NoFail>.fake(): CallStatus.Failu
 
 public fun <S> CallStatus<S, *>.successOrNull(): S? = (this as? CallStatus.Success)?.success
 
-//public inline fun <T, S : T, F : Error> CallStatus.Result<S, F>.successOr(onFailure: (CallStatus.Failure<S, F>) -> T): T =
-//    when (this) {
-//        is CallStatus.Success -> success
-//        is CallStatus.Failure -> onFailure(this)
-//    }
-//
-//public inline fun <S, F : Error> CallStatus.Result<S, F>.onSuccess(onSuccess: (S) -> Unit): CallStatus.Result<S, F> {
-//    if (this is CallStatus.Success) onSuccess(success)
-//    return this
-//}
-//
-//public inline fun <S, F : Error> CallStatus.Result<S, F>.onFailure(onFailure: (CallStatus.Failure<S, F>) -> Unit): CallStatus.Result<S, F> {
-//    if (this is CallStatus.Failure) { onFailure(this) }
-//    return this
-//}
-//
-//public inline fun <S, F : Error, R> CallStatus.Result<S, F>.on(
-//    success: (S) -> R,
-//    failure: (CallStatus.Failure<S, F>) -> R,
-//): R =
-//    when (this) {
-//        is CallStatus.Success -> success(this@on.success)
-//        is CallStatus.Failure -> failure(this)
-//    }
-//
-//public inline fun <S, F : Error> callFlow(
-//    crossinline call: suspend () -> CallStatus.Result<S, F>,
-//): Flow<CallStatus<S, F>> =
-//    flow {
-//        emit(CallStatus.Loading())
-//        call()
-//            .onSuccess { emit(CallStatus.Success(it)) }
-//            .onFailure { emit(it) }
-//    }
-//
-//public inline fun <S, F : Error> Flow<CallStatus<S, F>>.onSuccess(
-//    crossinline onSuccess: suspend (S) -> Unit,
-//): Flow<CallStatus<S, F>> =
-//    onEach {
-//        if (it is CallStatus.Success) onSuccess(it.success)
-//    }
-//
-//public inline fun <S, F : Error> Flow<CallStatus<S, F>>.onFailure(
-//    crossinline onFailure: suspend (CallStatus.Failure<S, F>) -> Unit,
-//): Flow<CallStatus<S, F>> =
-//    onEach {
-//        if (it is CallStatus.Failure) onFailure(it)
-//    }
-//
-//@OptIn(ExperimentalCoroutinesApi::class)
-//public inline fun <S1, S2, F : Error> Flow<CallStatus<S1, F>>.chainCall(
-//    crossinline call: suspend (S1) -> CallStatus.Result<S2, F>,
-//): Flow<CallStatus<S2, F>> =
-//    flatMapMerge { status ->
-//        when (status) {
-//            is CallStatus.NotSuccess -> flowOf(@Suppress("UNCHECKED_CAST") (status as CallStatus.NotSuccess<S2, F>))
-//            is CallStatus.Success -> callFlow { call(status.success) }
-//        }
-//    }
-//
-//public class MergeCallsBuilder<F : Error>(
-//    private val scope: CoroutineScope,
-//    private val failure: suspend (CallStatus.Failure<*, F>) -> Unit
-//): CoroutineScope by scope {
-//
-//    public fun <S> call(call: suspend () -> CallStatus.Result<S, F>): Deferred<S> {
-//        val def = CompletableDeferred<S>()
-//        launch {
-//            val result = call()
-//            when (result) {
-//                is CallStatus.Success -> { def.complete(result.success) }
-//                is CallStatus.Failure -> { failure(result) }
-//            }
-//        }
-//        return def
-//    }
-//
-//    public inline fun <S> calls(
-//        crossinline builder: suspend MergeCallsBuilder<F>.() -> S
-//    ): Deferred<S> =
-//        call {
-//            mergeCalls {
-//                builder()
-//            }
-//        }
-//
-//}
-//
-//public suspend inline fun <S, F : Error> mergeCalls(
-//    crossinline builder: suspend MergeCallsBuilder<F>.() -> S,
-//): CallStatus.Result<S, F> {
-//    lateinit var result: CallStatus.Result<S, F>
-//    coroutineScope {
-//        // Because coroutineScope returns a value, it propagates cancellation.
-//        // Using launch ensures that the scope does not propagate its cancellation if a call failure is returned.
-//        launch {
-//            val scope = this
-//            val success = MergeCallsBuilder(
-//                scope = this,
-//                failure = {
-//                    result = it.fakeSuccess()
-//                    scope.cancel()
-//                },
-//            ).builder()
-//            result = CallStatus.Success(success)
-//        }
-//    }
-//    return result
-//}
-//
-//public suspend inline fun <S, F : Error> callsFlow(
-//    crossinline builder: suspend MergeCallsBuilder<F>.() -> S,
-//): Flow<CallStatus<S, F>> =
-//    callFlow {
-//        mergeCalls {
-//            builder()
-//        }
-//    }
-//
-//@OptIn(ExperimentalCoroutinesApi::class)
-//public inline fun <S1, S2, F : Error> Flow<CallStatus<S1, F>>.chainCalls(
-//    crossinline builder: suspend MergeCallsBuilder<F>.(S1) -> S2,
-//): Flow<CallStatus<S2, F>> =
-//    flatMapMerge { status ->
-//        when (status) {
-//            is CallStatus.NotSuccess -> flowOf(@Suppress("UNCHECKED_CAST") (status as CallStatus.NotSuccess<S2, F>))
-//            is CallStatus.Success -> callsFlow { builder(status.success) }
-//        }
-//    }
-//
+public inline fun <T, S : T, F : Error> CallStatus.Result<S, F>.successOr(onFailure: (CallStatus.Failure<S, F>) -> T): T =
+    when (this) {
+        is CallStatus.Success -> success
+        is CallStatus.Failure -> onFailure(this)
+    }
+
+public inline fun <S, F : Error> CallStatus.Result<S, F>.onSuccess(onSuccess: (S) -> Unit): CallStatus.Result<S, F> {
+    if (this is CallStatus.Success) onSuccess(success)
+    return this
+}
+
+public inline fun <S, F : Error> CallStatus.Result<S, F>.onFailure(onFailure: (CallStatus.Failure<S, F>) -> Unit): CallStatus.Result<S, F> {
+    if (this is CallStatus.Failure) { onFailure(this) }
+    return this
+}
+
+public inline fun <S, F : Error, R> CallStatus.Result<S, F>.on(
+    success: (S) -> R,
+    failure: (CallStatus.Failure<S, F>) -> R,
+): R =
+    when (this) {
+        is CallStatus.Success -> success(this@on.success)
+        is CallStatus.Failure -> failure(this)
+    }
+
+public inline fun <S, F : Error> callFlow(
+    crossinline call: suspend () -> CallStatus.Result<S, F>,
+): Flow<CallStatus<S, F>> =
+    flow {
+        emit(CallStatus.Loading())
+        call()
+            .onSuccess { emit(CallStatus.Success(it)) }
+            .onFailure { emit(it) }
+    }
+
+public inline fun <S, F : Error> Flow<CallStatus<S, F>>.onSuccess(
+    crossinline onSuccess: suspend (S) -> Unit,
+): Flow<CallStatus<S, F>> =
+    onEach {
+        if (it is CallStatus.Success) onSuccess(it.success)
+    }
+
+public inline fun <S, F : Error> Flow<CallStatus<S, F>>.onFailure(
+    crossinline onFailure: suspend (CallStatus.Failure<S, F>) -> Unit,
+): Flow<CallStatus<S, F>> =
+    onEach {
+        if (it is CallStatus.Failure) onFailure(it)
+    }
+
+@OptIn(ExperimentalCoroutinesApi::class)
+public inline fun <S1, S2, F : Error> Flow<CallStatus<S1, F>>.mergeCall(
+    crossinline call: suspend (S1) -> CallStatus.Result<S2, F>,
+): Flow<CallStatus<S2, F>> =
+    flatMapMerge { status ->
+        when (status) {
+            is CallStatus.NotSuccess -> flowOf(@Suppress("UNCHECKED_CAST") (status as CallStatus.NotSuccess<S2, F>))
+            is CallStatus.Success -> callFlow { call(status.success) }
+        }
+    }
+
+public class CallChainBuilder<F : Error>(
+    private val scope: CoroutineScope,
+    private val failure: suspend (CallStatus.Failure<*, F>) -> Unit
+): CoroutineScope by scope {
+
+    public fun <S> link(call: suspend () -> CallStatus.Result<S, F>): Deferred<S> {
+        val def = CompletableDeferred<S>()
+        launch {
+            val result = call()
+            when (result) {
+                is CallStatus.Success -> { def.complete(result.success) }
+                is CallStatus.Failure -> { failure(result) }
+            }
+        }
+        return def
+    }
+
+    public inline fun <S> linkChain(
+        crossinline builder: suspend CallChainBuilder<F>.() -> CallStatus.Result<S, F>
+    ): Deferred<S> =
+        link {
+            callChain {
+                builder()
+            }
+        }
+
+}
+
+public suspend inline fun <S, F : Error> callChain(
+    crossinline builder: suspend CallChainBuilder<F>.() -> CallStatus.Result<S, F>,
+): CallStatus.Result<S, F> {
+    lateinit var result: CallStatus.Result<S, F>
+    coroutineScope {
+        // Because coroutineScope returns a value, it propagates cancellation.
+        // Using launch ensures that the scope does not propagate its cancellation if a call failure is returned.
+        launch {
+            val scope = this
+            result = CallChainBuilder(
+                scope = this,
+                failure = {
+                    result = it.fakeSuccess()
+                    scope.cancel()
+                },
+            ).builder()
+        }
+    }
+    return result
+}
+
+public suspend inline fun <S, F : Error> callChainFlow(
+    crossinline builder: suspend CallChainBuilder<F>.() -> CallStatus.Result<S, F>,
+): Flow<CallStatus<S, F>> =
+    callFlow {
+        callChain {
+            builder()
+        }
+    }
+
+@OptIn(ExperimentalCoroutinesApi::class)
+public inline fun <S1, S2, F : Error> Flow<CallStatus<S1, F>>.mergeChain(
+    crossinline builder: suspend CallChainBuilder<F>.(S1) -> CallStatus.Result<S2, F>,
+): Flow<CallStatus<S2, F>> =
+    flatMapMerge { status ->
+        when (status) {
+            is CallStatus.NotSuccess -> flowOf(@Suppress("UNCHECKED_CAST") (status as CallStatus.NotSuccess<S2, F>))
+            is CallStatus.Success -> callChainFlow { builder(status.success) }
+        }
+    }
