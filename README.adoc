@@ -807,6 +807,130 @@ them as a `NetworkFailure` would never fix what's actually wrong).
   broader type — a variance escape hatch, not a runtime check.
 |===
 
+=== Flows
+
+A call also comes as a cold `Flow<CallStatus<S, F>>`, for the UI that wants the `Loading` state as
+an emission rather than as a separate piece of bookkeeping. Three builders produce one:
+
+[cols="1,3",options="header"]
+|===
+| Builder | Emits
+
+| `caller.flow { }`
+| `Loading`, then one endpoint call's result.
+
+| `callFlow { }`
+| `Loading`, then the result of any `suspend` function returning a `CallStatus.Result`.
+
+| `callChainFlow { }`
+| `Loading`, then the single result of a whole <<chains,chain>> of calls.
+|===
+
+`flow { }` is ``call { }``'s `Flow` form, and takes the same optional request customization as a
+second block:
+
+.main.kt
+[source,kotlin]
+----
+APIServices.articles(client)
+    .flow { Articles().get(page = 1) }
+    .collect { status ->
+        when (status) {
+            CallStatus.Loading -> println("Loading…")
+            is CallStatus.Success -> println(status.success)
+            is CallStatus.Failure -> println("Failed: $status")
+        }
+    }
+----
+
+The three branches above are exhaustive: `Loading` is the only state that is neither a `Success`
+nor a `Failure`.
+
+Every one of these flows is *cold*. Nothing is called until the flow is collected, and each
+collection calls again — so a retry is simply another collection.
+
+`callFlow { }` is the same wrapper over anything that answers a `CallStatus.Result`, not just a
+single endpoint call — a repository function that already folds several calls together, say:
+
+.ArticleRepository.kt
+[source,kotlin]
+----
+class ArticleRepository(private val articles: ServiceCaller<ArticlesService>) {
+
+    suspend fun page(page: Int): CallStatus.Result<List<ArticleSummary>?, NoFail> =
+        articles.call { Articles().get(page = page) }
+
+    fun pageFlow(page: Int): Flow<CallStatus<List<ArticleSummary>?, NoFail>> =
+        callFlow { page(page) }
+}
+----
+
+Two operators read the states as they go by, leaving the flow untouched: `onSuccess { }` runs on
+every `Success`, `onFailure { }` on every `Failure`.
+
+=== Chains
+
+`callChainFlow { }` runs several calls as one unit: the whole chain emits one `Loading` and then a
+single `CallStatus.Result`, whichever call it ends up coming from.
+
+Inside the block, `link { }` starts a call and hands back its success value as a `Deferred`:
+
+.main.kt
+[source,kotlin]
+----
+sealed interface FailedCAAPC : Error {
+    data class FailedArticleCreation(val error: ArticleCreationFailure) : FailedCAAPC
+    data class FailedCommentPost(val error: ArticleCommentPostFailure) : FailedCAAPC
+}
+
+suspend fun createArticleAndPostComment(
+    articles: ServiceCaller<ArticlesService>,
+): Flow<CallStatus<Unit, FailedCAAPC>> =
+    callChainFlow {
+        val id = link {
+            articles
+                .call { Articles().New().create(ArticleContent(title = "Foo", author = "Me", content = "Bar")) }
+                .mapFailure { FailedCAAPC.FailedArticleCreation(it) }
+        }
+
+        articles
+            .call { Article(id.await()).Comments().post(ArticleComment(author = "Me", content = "Hello World!")) }
+            .mapFailure { FailedCAAPC.FailedCommentPost(it) }
+    }
+----
+
+Every call in a chain reports the same failure type, so each one's own `E` is mapped into it with
+`mapFailure { }` — which is what makes the chain's result a single type a caller can act on.
+
+The block's own return value is the chain's result when every link succeeded. Otherwise the *first
+link to fail* is the result, with its failure reported as-is:
+
+- A failed link's `Deferred` never completes, so an `await()` on it never resumes. The chain is
+  cancelled around it instead, which is why the block after that point does not run.
+- That cancellation stays inside the chain. The collector's scope is untouched: a failed chain
+  emits a `Failure` rather than cancelling its caller.
+- The links are cancelled too, so a chain never leaves a call in flight behind it.
+
+Links run in the chain's own scope, so every link started before the first `await()` runs
+*concurrently* — a chain is only sequential where you make it sequential by awaiting:
+
+[source,kotlin]
+----
+callChainFlow {
+    val summaries = link { articles.call { Articles().get(page = 1) } }   // <1>
+    val content = link { articles.call { Article(knownId).get() } }       // <1>
+    CallStatus.Success(summaries.await() to content.await())              // <2>
+}
+----
+<1> Both calls are already in flight here.
+<2> Awaited only once both are needed — either failing ends the chain.
+
+`callChain { }` is the same builder without the `Flow`, returning the `CallStatus.Result` directly,
+and `linkChain { }` nests a whole chain inside one link of an outer chain.
+
+NOTE: `callChainFlow` is itself a `suspend` function, so it is called from a coroutine even though,
+being cold, it runs nothing until collected. `callFlow` and `flow` are not.
+
 == Supported platforms
 
 `nomi-runtime-shared` and `nomi-runtime-client` are Kotlin Multiplatform libraries targeting:
