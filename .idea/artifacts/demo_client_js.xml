@@ -1,8 +1,0 @@
-<component name="ArtifactManager">
-  <artifact type="jar" name="demo-client-js">
-    <output-path>$PROJECT_DIR$/demo/demo-client/build/libs</output-path>
-    <root id="archive" name="demo-client-js.jar">
-      <element id="module-output" name="Kosi-Nomi.demo.demo-client.jsMain" />
-    </root>
-  </artifact>
-</component>

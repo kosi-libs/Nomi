@@ -4,7 +4,7 @@ plugins {
 }
 
 kotlin {
-    jvmToolchain(17)
+    jvmToolchain(findProperty("jvm.toolchain")!!.toString().toInt())
 
     jvm()
 
@@ -45,8 +45,6 @@ kotlin {
     explicitApi()
 
     sourceSets {
-        commonMain.dependencies {
-        }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
             implementation(libs.kotlinx.coroutines.test)

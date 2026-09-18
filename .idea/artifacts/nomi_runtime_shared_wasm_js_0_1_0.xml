@@ -1,8 +1,0 @@
-<component name="ArtifactManager">
-  <artifact type="jar" name="nomi-runtime-shared-wasm-js-0.1.0">
-    <output-path>$PROJECT_DIR$/runtime/nomi-runtime-shared/build/libs</output-path>
-    <root id="archive" name="nomi-runtime-shared-wasm-js-0.1.0.jar">
-      <element id="module-output" name="Kosi-Nomi.runtime.nomi-runtime-shared.wasmJsMain" />
-    </root>
-  </artifact>
-</component>

@@ -4,7 +4,8 @@ plugins {
 }
 
 kotlin {
-    jvmToolchain(17)
+    jvmToolchain(findProperty("jvm.toolchain")!!.toString().toInt())
+    explicitApi()
 }
 
 dependencies {
@@ -12,8 +13,9 @@ dependencies {
     // AnalyzedResource, ...), so they belong in its published POM's compile scope.
     api(libs.ksp.symbolProcessingApi)
 
-    testImplementation(libs.kotlin.test.junit)
     testImplementation(projects.runtime.nomiRuntimeShared)
+
+    testImplementation(libs.kotlin.test.junit)
 }
 
 mavenPublishing {

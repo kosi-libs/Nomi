@@ -7,7 +7,7 @@ plugins {
 }
 
 kotlin {
-    jvmToolchain(17)
+    jvmToolchain(findProperty("jvm.toolchain")!!.toString().toInt())
 
     jvm()
 
@@ -51,6 +51,7 @@ kotlin {
         }
         commonMain.dependencies {
             implementation(projects.runtime.nomiRuntimeShared)
+
             implementation(libs.kotlinx.coroutines)
             implementation(libs.kotlinx.serialization.json)
             implementation(libs.ktor.http)

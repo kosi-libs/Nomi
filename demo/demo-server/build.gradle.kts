@@ -4,17 +4,18 @@ plugins {
 }
 
 kotlin {
-    jvmToolchain(17)
+    jvmToolchain(findProperty("jvm.toolchain")!!.toString().toInt())
 }
 
 dependencies {
     implementation(projects.demo.demoShared)
     implementation(projects.runtime.nomiRuntimeServer)
+
     implementation(libs.kotlinx.serialization.json)
+    implementation(libs.ktor.serialization.json)
     implementation(libs.ktor.server)
     implementation(libs.ktor.server.cio)
     implementation(libs.ktor.server.contentNegotiation)
-    implementation(libs.ktor.serialization.json)
 
     ksp(projects.processor.nomiProcessorServer)
 }

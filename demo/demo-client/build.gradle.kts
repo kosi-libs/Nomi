@@ -7,7 +7,7 @@ plugins {
 }
 
 kotlin {
-    jvmToolchain(17)
+    jvmToolchain(findProperty("jvm.toolchain")!!.toString().toInt())
 
     jvm()
 
@@ -50,8 +50,9 @@ kotlin {
             kotlin.srcDir(layout.buildDirectory.dir("generated/ksp/metadata/commonMain/kotlin"))
         }
         commonMain.dependencies {
-            implementation(projects.runtime.nomiRuntimeClient)
             implementation(projects.demo.demoShared)
+            implementation(projects.runtime.nomiRuntimeClient)
+
             implementation(libs.kotlinx.coroutines)
             implementation(libs.kotlinx.serialization.json)
             implementation(libs.ktor.client)

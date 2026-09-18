@@ -5,21 +5,23 @@ plugins {
 }
 
 kotlin {
-    jvmToolchain(17)
+    jvmToolchain(findProperty("jvm.toolchain")!!.toString().toInt())
     explicitApi()
 }
 
 dependencies {
     api(projects.runtime.nomiRuntimeShared)
+
     api(libs.ktor.server)
+
     implementation(libs.kotlinx.coroutines)
 
     testImplementation(libs.kotlin.test.junit)
     testImplementation(libs.kotlinx.coroutines.test)
-    testImplementation(libs.ktor.server.testHost)
-    testImplementation(libs.ktor.server.contentNegotiation)
-    testImplementation(libs.ktor.serialization.json)
     testImplementation(libs.kotlinx.serialization.json)
+    testImplementation(libs.ktor.serialization.json)
+    testImplementation(libs.ktor.server.contentNegotiation)
+    testImplementation(libs.ktor.server.testHost)
 }
 
 mavenPublishing {

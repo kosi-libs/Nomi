@@ -5,7 +5,7 @@ plugins {
 }
 
 kotlin {
-    jvmToolchain(17)
+    jvmToolchain(findProperty("jvm.toolchain")!!.toString().toInt())
 
     jvm()
 
@@ -48,15 +48,16 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             api(projects.runtime.nomiRuntimeShared)
+
             api(libs.ktor.client)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
             implementation(libs.kotlinx.coroutines.test)
-            implementation(libs.ktor.client.mock)
-            implementation(libs.ktor.client.contentNegotiation)
-            implementation(libs.ktor.serialization.json)
             implementation(libs.kotlinx.serialization.json)
+            implementation(libs.ktor.client.contentNegotiation)
+            implementation(libs.ktor.client.mock)
+            implementation(libs.ktor.serialization.json)
         }
     }
 }
