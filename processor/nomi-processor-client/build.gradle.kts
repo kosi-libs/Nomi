@@ -20,9 +20,10 @@ dependencies {
 
     testImplementation(libs.kctfork.ksp)
     testImplementation(libs.kotlin.test.junit)
-    // Pins the KSP2 implementation to match ksp-symbolProcessingApi's version - without this,
-    // kctfork:ksp's own POM drags in an older impl (2.3.9) than the API we compile against (2.3.11),
-    // an API-newer-than-impl skew that risks AbstractMethodError.
+    // Pins the KSP2 implementation to ksp-symbolProcessingApi's version. kctfork:ksp's POM carries
+    // whichever KSP it was built against, and an implementation older than the API we compile
+    // against is an API-newer-than-impl skew that risks AbstractMethodError. The two agree today
+    // (kctfork 0.14.0 brings 2.3.12); this keeps them agreeing when either side moves next.
     testImplementation(libs.ksp.aaEmbeddable)
 }
 
