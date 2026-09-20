@@ -1,27 +1,23 @@
 package org.kodein.rest.nomi.client
 
-import io.ktor.client.HttpClient
-import io.ktor.client.call.body
-import io.ktor.client.request.HttpRequestBuilder
-import io.ktor.client.request.prepareRequest
-import io.ktor.client.statement.bodyAsText
-import io.ktor.http.HttpMethod
-import io.ktor.http.HttpStatusCode
-import io.ktor.http.isSuccess
-import io.ktor.util.reflect.TypeInfo
-import io.ktor.util.reflect.typeInfo
-import org.kodein.rest.nomi.EndpointService
-import org.kodein.rest.nomi.InternalNomiAPI
-import org.kodein.rest.nomi.LightException
-import org.kodein.rest.nomi.Stringer
+import io.ktor.client.*
+import io.ktor.client.call.*
+import io.ktor.client.request.*
+import io.ktor.client.request.forms.*
+import io.ktor.client.statement.*
+import io.ktor.http.*
+import io.ktor.util.reflect.*
 import org.kodein.rest.nomi.Either
 import org.kodein.rest.nomi.Either.Companion.error
 import org.kodein.rest.nomi.Either.Companion.unit
 import org.kodein.rest.nomi.Either.Companion.value
+import org.kodein.rest.nomi.EndpointFile
+import org.kodein.rest.nomi.EndpointService
 import org.kodein.rest.nomi.Error
-import org.kodein.rest.nomi.NType
+import org.kodein.rest.nomi.InternalNomiAPI
+import org.kodein.rest.nomi.LightException
+import org.kodein.rest.nomi.Stringer
 import kotlin.coroutines.cancellation.CancellationException
-import kotlin.reflect.KClass
 
 
 @InternalNomiAPI
@@ -46,7 +42,7 @@ internal suspend fun <S, F : Error> HttpClient.call(
     errorType: TypeInfo,
     pathSegments: List<String>,
     method: HttpMethod,
-    buildRequest: HttpRequestBuilder.() -> Unit = {}
+    buildRequest: suspend HttpRequestBuilder.() -> Unit = {}
 ): Either<S, F> {
     val statement = prepareRequest {
         url.pathSegments += pathSegments
@@ -82,13 +78,13 @@ context(service: NomiClientEndpointService)
 public suspend inline fun <reified S, reified F : Error> HttpClient.call(
     pathSegments: List<String>,
     method: HttpMethod,
-    crossinline buildRequest: HttpRequestBuilder.() -> Unit = {}
+    noinline buildRequest: suspend HttpRequestBuilder.() -> Unit = {}
 ): Either<S, F> = call(
     pathSegments = pathSegments,
     successType = typeInfo<S>(),
     errorType = typeInfo<F>(),
     method = method,
-    buildRequest = { buildRequest() }
+    buildRequest = buildRequest
 )
 
 @InternalNomiAPI
@@ -100,3 +96,69 @@ public fun <T> HttpRequestBuilder.appendParameter(
 ) {
     if (value != null) url.parameters.append(name, stringer.encode(value))
 }
+
+@InternalNomiAPI
+public class ListMultipart<T : Any>(private val parts: List<T>) : EndpointService.Multipart<T> {
+
+    private var index = 0
+    private var exhausted = false
+
+    override suspend fun readPart(): EndpointService.Multipart.Part<T>? {
+        check(!exhausted) {
+            "This Multipart has already been consumed. A Multipart is a single-pass stream, " +
+                    "so build a new one for each call rather than reusing this one."
+        }
+        if (index == parts.size) {
+            exhausted = true
+            return null
+        }
+        // An outgoing part owns nothing to hand back: the EndpointFiles in it belong to the caller,
+        // and closing them would break a file the caller still means to use.
+        return EndpointService.Multipart.Part(parts[index++]) {}
+    }
+}
+
+@InternalNomiAPI
+context(_: NomiClientEndpointService)
+public fun FormBuilder.appendEndpointFile(
+    key: String,
+    file: EndpointFile,
+) {
+    append(
+        key = key,
+        value = InputProvider(file.fileSize) { file.source() },
+        headers = Headers.build {
+            // ktor's formData already writes `Content-Disposition: form-data; name="<key>"` and
+            // appends this as a further value of the same header, which MultiPartFormDataContent
+            // then joins with "; ". So contribute *parameters only* - a disposition of our own
+            // would put a second, or an empty, `form-data` token in the middle of the header.
+            // The file name is always quoted: it is arbitrary user text, and every other client
+            // quotes it. The size is a number, so it is always a bare token.
+            append(HttpHeaders.ContentDisposition, buildList {
+                add("${ContentDisposition.Parameters.FileName}=${file.fileName.quote()}")
+                file.fileSize?.let { add("${ContentDisposition.Parameters.Size}=$it") }
+            }.joinToString("; "))
+            append(HttpHeaders.ContentType, file.contentType)
+        }
+    )
+}
+
+@InternalNomiAPI
+context(_: NomiClientEndpointService)
+public fun <T> FormBuilder.appendEndpointItem(
+    key: String,
+    value: T,
+    stringer: Stringer<T>,
+) {
+    // No Content-Disposition parameters: `form-data; name="<key>"`, which ktor writes itself, is the
+    // whole of what a form field needs. (A `size` parameter here described the encoded string, which
+    // is neither a thing the server reads nor meaningful for a form field.)
+    append(
+        key = key,
+        value = stringer.encode(value),
+        headers = Headers.build {
+            append(HttpHeaders.ContentType, stringer.contentType)
+        }
+    )
+}
+

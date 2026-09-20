@@ -6,13 +6,15 @@ import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
+import io.ktor.utils.io.core.*
 import kotlinx.coroutines.flow.Flow
+import org.kodein.rest.nomi.EndpointFile
 import org.kodein.rest.nomi.Error
 import org.kodein.rest.nomi.client.CallStatus
 import org.kodein.rest.nomi.client.ServiceCaller
 import org.kodein.rest.nomi.client.call
-import org.kodein.rest.nomi.client.mapFailure
 import org.kodein.rest.nomi.client.callChainFlow
+import org.kodein.rest.nomi.client.mapFailure
 import org.kodein.rest.nomi.client.successOrNull
 import org.kodein.rest.nomi.demo.shared.Article
 import org.kodein.rest.nomi.demo.shared.ArticleComment
@@ -26,6 +28,8 @@ import org.kodein.rest.nomi.demo.shared.Headers
 import org.kodein.rest.nomi.demo.shared.New
 import org.kodein.rest.nomi.demo.shared.SharedJson
 import org.kodein.rest.nomi.demo.shared.Tools
+import org.kodein.rest.nomi.demo.shared.ToolsPostData
+import kotlin.uuid.Uuid
 
 
 suspend fun main() {
@@ -60,6 +64,22 @@ suspend fun main() {
         .collect {
             println("Flow: $it")
         }
+
+    val source = buildPacket { write("Foo-Bar!".encodeToByteArray()) }
+
+    APIServices.mp(client).call {
+        Tools().post(
+            ToolsPostData.multipart(
+                file = EndpointFile(
+                    fileName = "foo.txt",
+                    fileSize = 8,
+                    source = { source }
+                ),
+                from = Uuid.random(),
+                with = listOf(ArticleContent("Yay", "Salomon", "This is cool!")),
+            )
+        )
+    }.also { println(it) }
 
     client.close()
 }

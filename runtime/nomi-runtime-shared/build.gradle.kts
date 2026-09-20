@@ -45,6 +45,9 @@ kotlin {
     explicitApi()
 
     sourceSets {
+        commonMain.dependencies {
+            api(libs.ktor.http)
+        }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
             implementation(libs.kotlinx.coroutines.test)

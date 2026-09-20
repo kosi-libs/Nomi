@@ -1,5 +1,6 @@
 package org.kodein.rest.nomi
 
+import io.ktor.http.ContentType
 import org.kodein.rest.nomi.Either.Companion.error
 import org.kodein.rest.nomi.Either.Companion.value
 
@@ -21,6 +22,8 @@ public interface Stringer<T> {
     public fun encode(value: T): String
     /** Reads [encoded] back into a [T], or fails with the reason the server answers `400` with. */
     public fun decode(encoded: String): Either<T, Failure>
+
+    public val contentType: ContentType get() = ContentType.Text.Plain
 
     /**
      * The `Stringer` for each type Nomi handles out of the box.

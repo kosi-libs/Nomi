@@ -1,5 +1,7 @@
 package org.kodein.rest.nomi
 
+import io.ktor.http.ContentType
+import kotlinx.io.Source
 import kotlin.reflect.KClass
 
 
@@ -102,6 +104,21 @@ public annotation class Endpoint(val method: Method) {
     @Retention(AnnotationRetention.BINARY)
     @Target(AnnotationTarget.PROPERTY, AnnotationTarget.VALUE_PARAMETER)
     public annotation class Stringed(val with: KClass<out Stringer<*>>)
+
+    @Retention(AnnotationRetention.BINARY)
+    @Target(AnnotationTarget.CLASS)
+    public annotation class MultipartFormData {
+        @Retention(AnnotationRetention.BINARY)
+        @Target(AnnotationTarget.CLASS)
+        public annotation class Part(val name: String = "", val presence: PartPresence = PartPresence.Required)
+
+        public enum class PartPresence {
+            Optional, // Zero or one
+            Required, // Exactly one
+            RepeatedOptional, // Zero, one, or more
+            RepeatedRequired, // One or more
+        }
+    }
 }
 
 /**
@@ -109,7 +126,73 @@ public annotation class Endpoint(val method: Method) {
  * functions require: it is what makes `httpError` and `routingCall` callable from inside an
  * endpoint implementation, and nowhere else.
  */
-public interface EndpointService
+public interface EndpointService {
+
+    /**
+     * The parts of a `multipart/form-data` body, as the values of [T].
+     *
+     * A multipart body is a single-pass stream: every part is read once, in the order the peer sent
+     * it. [forEachPart] is the only supported way to consume one — it owns the loop so that reaching
+     * the end of the stream, and leaving it early, are both accounted for.
+     */
+    public interface Multipart<T : Any> {
+
+        /**
+         * A part that has been read and decoded, together with the means to release it.
+         *
+         * [close] releases whatever the part holds — the peer's buffers, and every [EndpointFile]
+         * decoded out of it. [forEachPart] calls it as soon as the handler returns, so a part's
+         * content is only valid for the duration of that handler.
+         */
+        @InternalNomiAPI
+        public class Part<out T>(
+            public val value: T,
+            public val close: suspend () -> Unit,
+        )
+
+        /** Reads and decodes the next part, or `null` once the stream is exhausted. */
+        @InternalNomiAPI
+        public suspend fun readPart(): Part<T>?
+
+        /**
+         * Called by [forEachPart] once the stream has been read to its end, to check that every
+         * part the endpoint requires was actually sent. Answers `400` if one was not.
+         */
+        @InternalNomiAPI
+        public suspend fun validateRequiredParts() {}
+
+        /**
+         * Called by [forEachPart] when consumption stopped before the end of the stream — the
+         * handler returned early, or threw. Releases whatever is left unread.
+         *
+         * It deliberately does *not* check for missing parts: leaving early is a decision the
+         * endpoint made, not a malformed request.
+         */
+        @InternalNomiAPI
+        public suspend fun discardRemaining() {}
+    }
+
+}
+
+@OptIn(InternalNomiAPI::class)
+public suspend inline fun <T : Any> EndpointService.Multipart<T>.forEachPart(handler: (T) -> Unit) {
+    var readToEnd = false
+    try {
+        while (true) {
+            val part = readPart() ?: break
+            try {
+                handler(part.value)
+            } finally {
+                part.close()
+            }
+        }
+        readToEnd = true
+    } finally {
+        if (readToEnd) validateRequiredParts()
+        else discardRemaining()
+    }
+}
+
 
 /**
  * Opts in to Nomi's internals: declarations that generated code calls, whose signatures may change
@@ -121,3 +204,44 @@ public interface EndpointService
 @Retention(AnnotationRetention.BINARY)
 @Target(AnnotationTarget.CLASS, AnnotationTarget.FUNCTION)
 public annotation class InternalNomiAPI
+
+/**
+ * A file, either one being uploaded or one that arrived as a part of a `multipart/form-data` body.
+ *
+ * A file read off a request belongs to the part it came from: [source] is valid only until that
+ * part is released, which happens as soon as its `forEachPart` handler returns. Reading it after
+ * that throws [IllegalStateException] — it would otherwise read from a buffer the server has
+ * already handed back. A file you build yourself to upload is never closed.
+ */
+public class EndpointFile(
+    public val fileName: String,
+    public val fileSize: Long? = null,
+    public val contentType: ContentType = ContentType.Application.OctetStream,
+    source: () -> Source,
+) {
+    private val provider: () -> Source = source
+    private var closed: Boolean = false
+
+    /**
+     * Opens the file's content.
+     *
+     * Throws [IllegalStateException] once the part this file came from has been released.
+     */
+    public val source: () -> Source = {
+        check(!closed) {
+            "EndpointFile '$fileName' was read outside of its part. " +
+                "A file's content must be consumed inside forEachPart."
+        }
+        provider()
+    }
+
+    /** Ends this file's lifetime: every later [source] call fails. */
+    @InternalNomiAPI
+    public fun close() {
+        closed = true
+    }
+
+    override fun toString(): String {
+        return "EndpointFile(fileName=$fileName, fileSize=$fileSize, contentType=$contentType)"
+    }
+}
