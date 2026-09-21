@@ -8,6 +8,7 @@ import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.utils.io.core.*
 import kotlinx.coroutines.flow.Flow
+import org.kodein.rest.nomi.EndpointBinary
 import org.kodein.rest.nomi.EndpointFile
 import org.kodein.rest.nomi.Error
 import org.kodein.rest.nomi.client.CallStatus
@@ -67,7 +68,7 @@ suspend fun main() {
 
     val source = buildPacket { write("Foo-Bar!".encodeToByteArray()) }
 
-    APIServices.mp(client).call {
+    APIServices.tools(client).call {
         Tools().post(
             APIServices.multipartToolsPostData(
                 file = EndpointFile(
@@ -77,6 +78,18 @@ suspend fun main() {
                 ),
                 from = Uuid.random(),
                 with = listOf(ArticleContent("Yay", "Salomon", "This is cool!")),
+            )
+        )
+    }.also { println(it) }
+
+    val streamed = buildPacket { write("Streamed!".encodeToByteArray()) }
+
+    APIServices.tools(client).call {
+        Tools().put(
+            EndpointBinary(
+                size = 9,
+                contentType = ContentType.Text.Plain,
+                source = { streamed },
             )
         )
     }.also { println(it) }

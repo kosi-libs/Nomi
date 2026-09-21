@@ -11,6 +11,9 @@ import org.kodein.rest.nomi.Either
 import org.kodein.rest.nomi.Either.Companion.error
 import org.kodein.rest.nomi.Either.Companion.unit
 import org.kodein.rest.nomi.Either.Companion.value
+import io.ktor.http.content.ChannelWriterContent
+import io.ktor.utils.io.writeSource
+import org.kodein.rest.nomi.EndpointBinary
 import org.kodein.rest.nomi.EndpointFile
 import org.kodein.rest.nomi.EndpointService
 import org.kodein.rest.nomi.Error
@@ -105,6 +108,26 @@ public fun <T> HttpRequestBuilder.appendParameter(
  * empty body, so a builder's result is good for one call. Nothing here is released - the
  * ``EndpointFile``s in an outgoing part belong to the caller, unlike a part the server received.
  */
+/**
+ * Sets [binary] as the whole request body, streamed.
+ *
+ * It announces the binary's own [EndpointBinary.contentType], and its [EndpointBinary.size] as
+ * `Content-Length` when known - an unknown size is what makes ktor fall back to
+ * `Transfer-Encoding: chunked`, which is the honest answer for a stream of unknown length. The
+ * source is written a buffer at a time rather than read into memory first.
+ */
+@InternalNomiAPI
+context(_: NomiClientEndpointService)
+public fun HttpRequestBuilder.setEndpointBinaryBody(binary: EndpointBinary) {
+    setBody(
+        ChannelWriterContent(
+            body = { writeSource(binary.source()) },
+            contentType = binary.contentType,
+            contentLength = binary.size,
+        )
+    )
+}
+
 @InternalNomiAPI
 public class ListMultipart<T : Any>(private val parts: List<T>) : EndpointService.Multipart<T> {
 

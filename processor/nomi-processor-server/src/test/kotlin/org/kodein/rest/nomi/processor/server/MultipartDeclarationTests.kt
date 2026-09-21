@@ -348,4 +348,21 @@ class MultipartDeclarationTests {
         assertEquals(KotlinCompilation.ExitCode.OK, result.exitCode, result.errors().joinToString("\n"))
         assertTrue(result.generated("NomiServerImplRoutes.kt").contains("MoneyStringer"), result.generated("NomiServerImplRoutes.kt"))
     }
+
+    @Test
+    fun `rejects an EndpointBinary part payload and points at EndpointFile`() {
+        val result = compilePartType(
+            """
+            @Endpoint.MultipartFormData
+            sealed interface Upload {
+                data class Blob(val blob: org.kodein.rest.nomi.EndpointBinary) : Upload
+            }
+            """,
+        )
+        assertEquals(KotlinCompilation.ExitCode.COMPILATION_ERROR, result.exitCode)
+        assertTrue(
+            result.errors().any { it.contains("EndpointBinary is a whole request body") && it.contains("use EndpointFile") },
+            result.errors().toString(),
+        )
+    }
 }

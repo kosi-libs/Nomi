@@ -346,9 +346,56 @@ the function can then be named anything, as `create` is above.
 === The request body
 
 The first parameter, when it carries no `@Endpoint.Query` — `content` in `Articles.New.create`
-above. Only `post`, `put` and `patch` endpoints may declare one. A `Multipart<T>` parameter in that
-position is a `multipart/form-data` body instead (see <<multipart-form-data,Multipart form data>>);
-an endpoint has one or the other, never both.
+above. Only `post`, `put` and `patch` endpoints may declare one. That one parameter can instead be
+a `Multipart<T>`, for a `multipart/form-data` body (see <<multipart-form-data,Multipart form data>>),
+or an `EndpointBinary`, for a raw streamed one (see <<streaming-a-request-body,Streaming a request
+body>>) — an endpoint has exactly one of the three, never two.
+
+[#streaming-a-request-body]
+=== Streaming a request body
+
+An `EndpointBinary` body parameter means the request body *is* that binary's content, streamed —
+no serialization, no `ContentNegotiation`. The client announces the binary's own content type, and
+its size as `Content-Length` when it knows one:
+
+.FilesService.kt
+[source,kotlin]
+----
+@Endpoint.Service
+interface FilesService : EndpointService {
+    @Endpoint(Endpoint.Method.Put)
+    suspend fun Files.put(`data`: EndpointBinary): Either<Unit, NoFail>
+}
+----
+
+.main.kt
+[source,kotlin]
+----
+APIServices.files(client).call {
+    Files().put(
+        EndpointBinary(
+            size = 9,
+            contentType = ContentType.Text.Plain,
+            source = { packet },
+        )
+    )
+}
+----
+
+Leave `size` `null` when the length is not known up front and the request goes out
+`Transfer-Encoding: chunked`. Server-side the endpoint receives an `EndpointBinary` built from the
+request, with `contentType` and `size` taken from its headers — `size` is `null` for a chunked
+request, whose length is genuinely unknown until it ends.
+
+NOTE: A received body is single-pass, and valid only *inside* the endpoint. Opening its `source()`
+twice throws, and so does reading it after the endpoint has returned — the server has recycled the
+connection by then. Read what you need while you are still in the endpoint.
+
+``EndpointBinary`` and ``EndpointFile`` are not interchangeable, and Nomi says so rather than
+letting either fail at runtime: an `EndpointFile` is one part of a multipart body and carries a file
+name, so it is rejected as a whole body; an `EndpointBinary` is a whole body, so it is rejected as a
+part payload. A streamed *response* is not supported — `EndpointBinary` as an endpoint's success
+type is an error.
 
 === Query parameters
 
@@ -752,7 +799,7 @@ body is written, so build a fresh one per call rather than reusing one.
   missing. The body is the `Stringer.Failure` reason. A multipart body adds its own causes: a
   missing required part, a second occurrence of a part that may not repeat, a part the endpoint
   never declared, a part of the wrong kind, and a part whose `Content-Type` contradicts its
-  ``Stringer``'s.
+  ``Stringer``'s. A streamed body adds one more: a malformed `Content-Type` header.
 
 | _(anything else)_
 | Whatever `httpError(code, message)` raised, with `message` as the body when one was given.

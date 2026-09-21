@@ -278,6 +278,47 @@ public suspend inline fun <T : Any> EndpointService.Multipart<T>.forEachPart(han
 public annotation class InternalNomiAPI
 
 /**
+ * Bytes travelling over an endpoint, with the content type and - when known - the length that
+ * describe them.
+ *
+ * Its two forms are not interchangeable, and Nomi rejects each in the other's position:
+ * [EndpointFile] is one part of a `multipart/form-data` body and carries a file name, while
+ * [EndpointBinary] is a whole raw request body.
+ *
+ * [source] is a provider, not a value, so nothing is read until something asks. One received off a
+ * request has a lifetime: [close] ends it, and every later [source] call then throws rather than
+ * reading a buffer the server has already handed back.
+ */
+public sealed class AbstractEndpointBinary(
+    public val size: Long? = null,
+    public val contentType: ContentType = ContentType.Application.OctetStream,
+    source: () -> Source,
+) {
+    private val provider: () -> Source = source
+    private var closed: Boolean = false
+
+    /**
+     * Opens the content.
+     *
+     * Throws [IllegalStateException] once this has been [close]d - for a multipart file, when its
+     * part was released; for a request body, when the endpoint returned.
+     */
+    public val source: () -> Source = {
+        check(!closed) { closedErrorMessage() }
+        provider()
+    }
+
+    protected abstract fun closedErrorMessage(): String
+
+    /** Ends this content's lifetime: every later [source] call fails. */
+    @InternalNomiAPI
+    public fun close() {
+        closed = true
+    }
+}
+
+
+/**
  * A file, either one being uploaded or one that arrived as a part of a `multipart/form-data` body.
  *
  * A file read off a request belongs to the part it came from: [source] is valid only until that
@@ -287,33 +328,42 @@ public annotation class InternalNomiAPI
  */
 public class EndpointFile(
     public val fileName: String,
-    public val fileSize: Long? = null,
-    public val contentType: ContentType = ContentType.Application.OctetStream,
+    fileSize: Long? = null,
+    contentType: ContentType = ContentType.Application.OctetStream,
     source: () -> Source,
-) {
-    private val provider: () -> Source = source
-    private var closed: Boolean = false
+) : AbstractEndpointBinary(fileSize, contentType, source) {
+    public val fileSize: Long? get() = super.size
 
-    /**
-     * Opens the file's content.
-     *
-     * Throws [IllegalStateException] once the part this file came from has been released.
-     */
-    public val source: () -> Source = {
-        check(!closed) {
-            "EndpointFile '$fileName' was read outside of its part. " +
-                "A file's content must be consumed inside forEachPart."
-        }
-        provider()
-    }
-
-    /** Ends this file's lifetime: every later [source] call fails. */
-    @InternalNomiAPI
-    public fun close() {
-        closed = true
-    }
+    override fun closedErrorMessage(): String =
+        "EndpointFile '$fileName' was read outside of its part. A file's content must be consumed inside forEachPart."
 
     override fun toString(): String {
         return "EndpointFile(fileName=$fileName, fileSize=$fileSize, contentType=$contentType)"
+    }
+}
+
+/**
+ * A whole request body, streamed.
+ *
+ * An endpoint declaring one as its body parameter sends and receives raw bytes: the client
+ * announces this [contentType] and, when [size] is known, a matching `Content-Length` - a `null`
+ * size goes out `Transfer-Encoding: chunked`. Nothing is serialized, and `ContentNegotiation` is
+ * not consulted (README.adoc § Streaming a request body).
+ *
+ * A received body is single-pass and valid only inside its endpoint: opening [source] twice
+ * throws, and so does reading it after the endpoint returned. For one part of a multipart body,
+ * use [EndpointFile] instead; a streamed *response* is not supported.
+ */
+public class EndpointBinary(
+    size: Long? = null,
+    contentType: ContentType = ContentType.Application.OctetStream,
+    source: () -> Source,
+) : AbstractEndpointBinary(size, contentType, source) {
+
+    override fun closedErrorMessage(): String =
+        "EndpointBinary was read after being closed."
+
+    override fun toString(): String {
+        return "EndpointBinary(size=$size, contentType=$contentType)"
     }
 }

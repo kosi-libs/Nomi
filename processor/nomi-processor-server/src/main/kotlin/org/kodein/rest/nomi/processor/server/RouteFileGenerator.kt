@@ -15,6 +15,7 @@ import org.kodein.rest.nomi.processor.common.multipart.MultipartPart
 import org.kodein.rest.nomi.processor.common.multipart.PartPayload
 import org.kodein.rest.nomi.processor.common.resource.AnalyzedResource
 import org.kodein.rest.nomi.processor.common.service.AnalyzedEndpoint
+import org.kodein.rest.nomi.processor.common.service.BinaryParam
 import org.kodein.rest.nomi.processor.common.service.BodyParam
 import org.kodein.rest.nomi.processor.common.service.MultipartParam
 import org.kodein.rest.nomi.processor.common.service.HttpMethod
@@ -36,6 +37,7 @@ private val AS_ENDPOINT_VALUE = MemberName("org.kodein.rest.nomi.server", "asEnd
 private val HTTP_ERROR = MemberName("org.kodein.rest.nomi.server", "httpError")
 private val HTTP_STATUS_CODE = ClassName("io.ktor.http", "HttpStatusCode")
 private val PART_PRESENCE = ClassName("org.kodein.rest.nomi", "Endpoint", "MultipartFormData", "PartPresence")
+private val RECEIVE_ENDPOINT_BINARY = MemberName("org.kodein.rest.nomi.server", "receiveEndpointBinary")
 
 private fun httpMethodMember(method: HttpMethod): MemberName =
     MemberName("io.ktor.server.routing", method.name.lowercase())
@@ -84,10 +86,27 @@ public class RouteFileGenerator(private val codeGenerator: CodeGenerator) {
     private fun renderHandler(endpoint: AnalyzedEndpoint): CodeBlock {
         val builder = CodeBlock.builder()
         builder.beginControlFlow("%M", httpMethodMember(endpoint.method))
+
+        // A streamed body is received before the endpoint runs - ktor allows one receive per call -
+        // and closed after it, so a read that outlives the endpoint fails loudly rather than
+        // reading a buffer the engine has already recycled.
+        val binary = endpoint.payload as? BinaryParam
+        if (binary != null) {
+            builder.addStatement("val %N = call.%M(service)", binary.name, RECEIVE_ENDPOINT_BINARY)
+            builder.beginControlFlow("try")
+        }
+
         builder.beginControlFlow("call.%M(service)", RESPOND)
         builder.add(renderCall(endpoint))
         builder.add("\n")
         builder.endControlFlow()
+
+        if (binary != null) {
+            builder.nextControlFlow("finally")
+            builder.addStatement("%N.close()", binary.name)
+            builder.endControlFlow()
+        }
+
         builder.endControlFlow()
         return builder.build()
     }
@@ -102,6 +121,8 @@ public class RouteFileGenerator(private val codeGenerator: CodeGenerator) {
             when (val payload = endpoint.payload) {
                 null -> Unit
                 is BodyParam -> add(CodeBlock.of("%N = call.%M()", payload.name, RECEIVE))
+                // Received above, so the handler can close it afterwards.
+                is BinaryParam -> add(CodeBlock.of("%N = %N", payload.name, payload.name))
                 is MultipartParam -> add(renderMultipartArg(payload))
             }
             endpoint.queries.forEach { add(renderQueryArg(it)) }

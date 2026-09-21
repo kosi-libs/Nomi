@@ -90,11 +90,13 @@ public object EndpointParamChecks {
     ): RequestPayload? {
         val rawType = param.type.resolve()
         if (rawType.isError) return null // deferred to the next round, not a validation error
-        val isMultipart = rawType.expandTypealias().declaration.qualifiedName?.asString() == NomiFq.MULTIPART
-        return if (isMultipart) {
-            checkMultipart(param, paramName, method, multipartAnalyzer, scopeChain, user, endpointName, reporter)
-        } else {
-            checkBody(param, paramName, method, user, endpointName, reporter)
+        return when (rawType.expandTypealias().declaration.qualifiedName?.asString()) {
+            NomiFq.MULTIPART ->
+                checkMultipart(param, paramName, method, multipartAnalyzer, scopeChain, user, endpointName, reporter)
+            NomiFq.ENDPOINT_BINARY ->
+                checkBinary(param, paramName, method, endpointName, reporter)
+            else ->
+                checkBody(param, paramName, method, user, endpointName, reporter)
         }
     }
 
@@ -151,7 +153,22 @@ public object EndpointParamChecks {
         return if (ok) MultipartParam(param, paramName, analyzed) else null
     }
 
-    private fun checkBody(param: KSValueParameter, paramName: String, method: HttpMethod, user: KSDeclaration, endpointName: String, reporter: Reporter): BodyParam? {
+    /** A streamed `EndpointBinary` body: the same position rules an ordinary body obeys, and
+     * nothing else - its wire shape comes from the binary itself, not from a `Stringer` or from
+     * ContentNegotiation. */
+    private fun checkBinary(param: KSValueParameter, paramName: String, method: HttpMethod, endpointName: String, reporter: Reporter): BinaryParam? {
+        var ok = checkBodyPosition(param, method, endpointName, reporter)
+
+        val type = param.type.resolve().expandTypealias()
+        if (type.isMarkedNullable) {
+            reporter.error(param, NomiErrors.endpointBodyNullable(endpointName)); ok = false
+        }
+
+        return if (ok) BinaryParam(param, paramName) else null
+    }
+
+    /** The rules every unannotated first parameter obeys, whatever its kind. */
+    private fun checkBodyPosition(param: KSValueParameter, method: HttpMethod, endpointName: String, reporter: Reporter): Boolean {
         var ok = true
         if (method != HttpMethod.Post && method != HttpMethod.Put && method != HttpMethod.Patch) {
             reporter.error(param, NomiErrors.endpointBodyOnGetOrDelete(endpointName, method.name)); ok = false
@@ -165,6 +182,11 @@ public object EndpointParamChecks {
         if (param.annotationNamed(NomiFq.STRINGED) != null) {
             reporter.error(param, NomiErrors.endpointBodyHasStringed(endpointName)); ok = false
         }
+        return ok
+    }
+
+    private fun checkBody(param: KSValueParameter, paramName: String, method: HttpMethod, user: KSDeclaration, endpointName: String, reporter: Reporter): BodyParam? {
+        var ok = checkBodyPosition(param, method, endpointName, reporter)
 
         val rawType = param.type.resolve()
         if (rawType.isError) return null // deferred to the next round, not a validation error
@@ -184,6 +206,9 @@ public object EndpointParamChecks {
             }
             fqName == "kotlin.Unit" || fqName == "kotlin.Nothing" -> {
                 reporter.error(param, NomiErrors.endpointBodyForbiddenType(endpointName, fqName)); ok = false
+            }
+            fqName == NomiFq.ENDPOINT_FILE -> {
+                reporter.error(param, NomiErrors.endpointBodyIsEndpointFile(endpointName)); ok = false
             }
         }
         if (!GeneralChecks.checkAtLeastAsVisible(type.declaration, user, reporter)) ok = false

@@ -274,7 +274,14 @@ method conflict is legal.
 * A parameter typed `EndpointService.Multipart<T>` is the request body in `multipart/form-data` form, and obeys every
   body rule above: it must be first and unannotated, is allowed only on `Post`, `Put` or `Patch`, and must not be
   `vararg`, have a default value, be nullable, or carry `@Endpoint.Query` or `@Endpoint.Stringed`.
-* An endpoint declares either an ordinary body or a `Multipart<T>` parameter, never both.
+* A parameter typed `EndpointBinary` is a raw streamed request body, and obeys the same body rules: first,
+  unannotated, `Post`/`Put`/`Patch` only, non-`vararg`, no default, non-nullable, no `@Endpoint.Query` or
+  `@Endpoint.Stringed`. Its wire shape comes from the binary itself, so it needs no `Stringer` and no
+  `ContentNegotiation`.
+* An endpoint's one unannotated first parameter is an ordinary body, an `EndpointBinary`, or a `Multipart<T>` -
+  exactly one of the three.
+* An `EndpointFile` body parameter is an error: a file is one part of a multipart body, so the diagnostic names
+  `EndpointBinary` instead. Symmetrically, an `EndpointBinary` part payload is an error naming `EndpointFile`.
 * `T` must be a part type — an interface annotated `@Endpoint.MultipartFormData`, see
   <<multipart-part-types,Multipart part types>>. A star projection, a type parameter, or a type without that
   annotation is an error.
@@ -294,6 +301,8 @@ method conflict is legal.
   overlap between `V` and `E` would make a failure indistinguishable from a value at runtime.
 * `V` may be `Unit`, or nullable — both cases answer `204 No Content` (see the root README's Wire protocol section).
 * `NoFail` must not be used as `V`.
+* `EndpointBinary` and `EndpointFile` must not be used as `V`: Nomi streams a request body, not a response one - a
+  ktor response stays streamable only inside `execute { }`, which the client's call shape does not provide.
 
 [#multipart-part-types]
 === Multipart part types (`@Endpoint.MultipartFormData`)
@@ -533,6 +542,30 @@ under the `@InternalNomiAPI` optin annotation:
 * `decodeRequired(stringer, name, value: String?)` decodes a required query parameter, and raises `400 Bad Request`
   when it is absent.
 
+An endpoint taking an `EndpointBinary` receives it *before* entering `respond`'s block - ktor allows one receive per
+call - and closes it in a `finally` afterwards, so a read that outlives the endpoint fails loudly rather than reading
+a recycled buffer:
+
+[source,kotlin]
+----
+put {
+  val `data` = call.receiveEndpointBinary(service)
+  try {
+    call.respond(service) {
+      NomiFiles
+      .put(
+        `data` = `data`,
+      )
+    }
+  } finally {
+    `data`.close()
+  }
+}
+----
+
+`receiveEndpointBinary` takes the service as an ordinary argument rather than a context parameter, because at that
+point `respond`'s block - and with it the `EndpointService` context - has not been entered yet.
+
 An endpoint taking a `Multipart<T>` reads `call.receiveMultipart()` instead of `call.receive()`, and wraps it in an
 `EndpointMultipartReceiver` carrying the part-presence map from the declaration and a transform that decodes one
 `PartData` into a part:
@@ -699,6 +732,10 @@ override suspend fun Tools.post(parts: EndpointService.Multipart<ToolsPostData>)
 
 Note the two different keys at play: the builder's *parameter* is named after the subtype (`with`), while the part it
 is encoded under is the effective *part name* (`"article"`). The `when` is exhaustive and carries no `else`.
+
+An endpoint taking an `EndpointBinary` emits `setEndpointBinaryBody(data)` in place of `setBody(data)`: it builds a
+`ChannelWriterContent` carrying the binary's content type and, when known, its size, and streams the source into the
+request rather than buffering it.
 
 `appendEndpointFile` and `appendEndpointItem` are runtime functions under `@InternalNomiAPI`, and `ListMultipart` is
 the runtime's `Multipart<T>` over a plain list. A `Multipart<T>` is a single-pass stream in both directions: the

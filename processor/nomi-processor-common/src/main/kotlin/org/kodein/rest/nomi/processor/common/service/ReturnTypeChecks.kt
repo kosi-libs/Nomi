@@ -93,6 +93,11 @@ public object ReturnTypeChecks {
         if (fqName == NomiFq.NO_FAIL) {
             reporter.error(function, NomiErrors.endpointReturnValueIsNoFail(name)); return false
         }
+        // Nomi streams a request body, not a response one: a response stays streamable only inside
+        // ktor's `execute { }`, which the client's call shape does not provide.
+        if (fqName == NomiFq.ENDPOINT_BINARY || fqName == NomiFq.ENDPOINT_FILE) {
+            reporter.error(function, NomiErrors.returnValueIsBinary(name, valueArg.declaration.fq())); return false
+        }
         return true
     }
 

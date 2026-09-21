@@ -17,8 +17,9 @@ import org.kodein.rest.nomi.processor.common.stringer.StringerRef
 public enum class HttpMethod { Get, Post, Put, Patch, Delete }
 
 /** What an endpoint takes as its request, in the one unannotated first parameter. SPECS.adoc §
- * Endpoint parameters: "An endpoint declares either an ordinary body or a `Multipart<T>` parameter,
- * never both" - sealed so that both generators' handling of the two is compiler-checked. */
+ * Endpoint parameters: an endpoint declares one of an ordinary body, a streamed `EndpointBinary`,
+ * or a `Multipart<T>` - never more than one, since there is only ever one such parameter. Sealed so
+ * that both generators' handling of every kind is compiler-checked. */
 public sealed interface RequestPayload {
     public val declaration: KSValueParameter
     public val name: String
@@ -29,6 +30,12 @@ public class BodyParam(
     override val declaration: KSValueParameter,
     override val name: String,
     public val type: KSType,
+) : RequestPayload
+
+/** The `EndpointBinary` parameter of an endpoint: the whole request body, streamed. */
+public class BinaryParam(
+    override val declaration: KSValueParameter,
+    override val name: String,
 ) : RequestPayload
 
 /** The `Multipart<T>` parameter of an endpoint, with `T`'s analysed parts. */

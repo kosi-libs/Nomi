@@ -377,4 +377,43 @@ class EndpointReturnTypeTests {
         assertEquals(KotlinCompilation.ExitCode.COMPILATION_ERROR, result.exitCode)
         assertTrue(result.errors().any { it.contains("SomeFailure") && it.contains("less visible") }, result.errors().toString())
     }
+
+    @Test
+    fun `rejects EndpointBinary and EndpointFile as the success type`() {
+        for (type in listOf("EndpointBinary", "EndpointFile")) {
+            val result = compile(
+                SourceFile.kotlin(
+                    "endpoints.kt",
+                    """
+                    package test
+                    import org.kodein.rest.nomi.Endpoint
+                    import org.kodein.rest.nomi.EndpointBinary
+                    import org.kodein.rest.nomi.EndpointFile
+                    import org.kodein.rest.nomi.EndpointService
+                    import org.kodein.rest.nomi.Either
+                    import org.kodein.rest.nomi.NoFail
+                    import org.kodein.rest.nomi.server.ServerEndpointService
+
+                    @Endpoint.Resource
+                    interface Res
+
+                    @Endpoint.Service
+                    interface Svc : EndpointService {
+                        suspend fun Res.`get`(): Either<$type, NoFail>
+                    }
+
+                    @ServerEndpointService("svc")
+                    class ServerImpl : Svc {
+                        override suspend fun Res.`get`(): Either<$type, NoFail> = TODO()
+                    }
+                    """,
+                ),
+            )
+            assertEquals(KotlinCompilation.ExitCode.COMPILATION_ERROR, result.exitCode, type)
+            assertTrue(
+                result.errors().any { it.contains("streams a request body, not a response one") },
+                "$type: ${result.errors()}",
+            )
+        }
+    }
 }

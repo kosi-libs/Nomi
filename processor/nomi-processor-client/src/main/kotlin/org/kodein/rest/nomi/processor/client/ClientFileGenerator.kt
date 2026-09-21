@@ -24,6 +24,7 @@ import org.kodein.rest.nomi.processor.common.resource.PathParam
 import org.kodein.rest.nomi.processor.common.multipart.MultipartPart
 import org.kodein.rest.nomi.processor.common.multipart.PartPayload
 import org.kodein.rest.nomi.processor.common.service.AnalyzedEndpoint
+import org.kodein.rest.nomi.processor.common.service.BinaryParam
 import org.kodein.rest.nomi.processor.common.service.BodyParam
 import org.kodein.rest.nomi.processor.common.service.MultipartParam
 import org.kodein.rest.nomi.processor.common.service.AnalyzedService
@@ -48,6 +49,8 @@ private val FORM_DATA = MemberName("io.ktor.client.request.forms", "formData")
 private val FOR_EACH_PART = MemberName("org.kodein.rest.nomi", "forEachPart")
 private val APPEND_ENDPOINT_FILE = MemberName("org.kodein.rest.nomi.client", "appendEndpointFile")
 private val APPEND_ENDPOINT_ITEM = MemberName("org.kodein.rest.nomi.client", "appendEndpointItem")
+private val ENDPOINT_BINARY = ClassName("org.kodein.rest.nomi", "EndpointBinary")
+private val SET_ENDPOINT_BINARY_BODY = MemberName("org.kodein.rest.nomi.client", "setEndpointBinaryBody")
 private val BUILD_REQUEST_TYPE = LambdaTypeName.get(receiver = HTTP_REQUEST_BUILDER, returnType = UNIT)
 
 private fun httpMethodMember(method: HttpMethod): MemberName = MemberName(HTTP_METHOD_COMPANION, method.name)
@@ -125,6 +128,7 @@ public class ClientFileGenerator(private val codeGenerator: CodeGenerator) {
         when (val payload = endpoint.payload) {
             null -> Unit
             is BodyParam -> builder.addParameter(payload.name, payload.type.toTypeName())
+            is BinaryParam -> builder.addParameter(payload.name, ENDPOINT_BINARY)
             is MultipartParam -> builder.addParameter(
                 payload.name,
                 MULTIPART.parameterizedBy(payload.multipart.declaration.toClassName()),
@@ -167,6 +171,7 @@ public class ClientFileGenerator(private val codeGenerator: CodeGenerator) {
             when (val payload = endpoint.payload) {
                 null -> Unit
                 is BodyParam -> add(CodeBlock.of("%M(%N)", SET_BODY_MEMBER, payload.name))
+                is BinaryParam -> add(CodeBlock.of("%M(%N)", SET_ENDPOINT_BINARY_BODY, payload.name))
                 is MultipartParam -> add(renderMultipartBody(payload))
             }
             endpoint.queries.forEach { add(renderAppendParameter(it)) }

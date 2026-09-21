@@ -574,4 +574,77 @@ class EndpointParameterTests {
         assertEquals(KotlinCompilation.ExitCode.COMPILATION_ERROR, result.exitCode)
         assertTrue(result.errors().any { it.contains("not annotated @Endpoint.MultipartFormData") }, result.errors().toString())
     }
+
+    // --- Streamed EndpointBinary body (SPECS.adoc § Endpoint parameters) ---
+
+    private fun binaryEndpoint(signature: String, method: String = "@Endpoint(Endpoint.Method.Put)") = compile(
+        SourceFile.kotlin(
+            "endpoints.kt",
+            """
+            package test
+            import org.kodein.rest.nomi.Endpoint
+            import org.kodein.rest.nomi.EndpointBinary
+            import org.kodein.rest.nomi.EndpointFile
+            import org.kodein.rest.nomi.EndpointService
+            import org.kodein.rest.nomi.Either
+            import org.kodein.rest.nomi.NoFail
+            import org.kodein.rest.nomi.server.ServerEndpointService
+
+            @Endpoint.Resource
+            interface Res
+
+            @Endpoint.Service
+            interface Svc : EndpointService {
+                $method
+                suspend fun Res.act($signature): Either<Unit, NoFail>
+            }
+
+            @ServerEndpointService("svc")
+            class ServerImpl : Svc {
+                override suspend fun Res.act($signature): Either<Unit, NoFail> = TODO()
+            }
+            """,
+        ),
+    )
+
+    @Test
+    fun `accepts an EndpointBinary body on Put`() {
+        val result = binaryEndpoint("`data`: EndpointBinary")
+        assertEquals(KotlinCompilation.ExitCode.OK, result.exitCode, result.errors().joinToString("\n"))
+        val generated = result.generated("NomiServerImplRoutes.kt")
+        assertTrue(generated.contains("call.receiveEndpointBinary(service)"), generated)
+        assertTrue(generated.contains("finally"), generated)
+        assertTrue(generated.contains(".close()"), generated)
+    }
+
+    @Test
+    fun `rejects an EndpointBinary body on a Get endpoint`() {
+        val result = binaryEndpoint("`data`: EndpointBinary", method = "@Endpoint(Endpoint.Method.Get)")
+        assertEquals(KotlinCompilation.ExitCode.COMPILATION_ERROR, result.exitCode)
+        assertTrue(result.errors().any { it.contains("only allowed on Post, Put or Patch") }, result.errors().toString())
+    }
+
+    @Test
+    fun `rejects a nullable EndpointBinary body`() {
+        val result = binaryEndpoint("`data`: EndpointBinary?")
+        assertEquals(KotlinCompilation.ExitCode.COMPILATION_ERROR, result.exitCode)
+        assertTrue(result.errors().any { it.contains("must not be nullable") }, result.errors().toString())
+    }
+
+    @Test
+    fun `rejects an EndpointBinary body with a default value`() {
+        val result = binaryEndpoint("`data`: EndpointBinary = TODO()")
+        assertEquals(KotlinCompilation.ExitCode.COMPILATION_ERROR, result.exitCode)
+        assertTrue(result.errors().any { it.contains("must not have a default value") }, result.errors().toString())
+    }
+
+    @Test
+    fun `rejects an EndpointFile body and points at EndpointBinary`() {
+        val result = binaryEndpoint("`file`: EndpointFile")
+        assertEquals(KotlinCompilation.ExitCode.COMPILATION_ERROR, result.exitCode)
+        assertTrue(
+            result.errors().any { it.contains("EndpointFile is a multipart part") && it.contains("use EndpointBinary") },
+            result.errors().toString(),
+        )
+    }
 }

@@ -21,7 +21,6 @@ fun main() {
         routing {
             articles(ServerArticlesService())
             tools(ServerToolsService())
-            mp(ServerMPService())
         }
 
     }.start(wait = true)

@@ -10,6 +10,8 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.withContext
 import kotlinx.io.buffered
 import org.kodein.rest.nomi.Either
+import io.ktor.server.request.*
+import org.kodein.rest.nomi.EndpointBinary
 import org.kodein.rest.nomi.EndpointFile
 import org.kodein.rest.nomi.Endpoint.MultipartFormData.PartPresence
 import org.kodein.rest.nomi.EndpointService
@@ -97,6 +99,45 @@ context(_: EndpointService)
 public inline fun <reified T> decodeRequired(stringer: Stringer<T>, name: String, encoded: String?): T {
     if (encoded == null) httpError(HttpStatusCode.BadRequest, "Missing required query parameter '$name'")
     return decode(stringer, encoded)
+}
+
+/**
+ * Receives the whole request body as a streamed [EndpointBinary].
+ *
+ * The body's `Content-Type` becomes the binary's, defaulting to `application/octet-stream` when the
+ * peer sent none, and its `Content-Length` becomes [EndpointBinary.size] - `null` for a chunked
+ * request, whose length is genuinely unknown until it ends. A malformed `Content-Type` is a
+ * `400 Bad Request`.
+ *
+ * The body is single-pass: ktor allows one `receive` per call, so the channel is taken here and the
+ * returned binary's source may be opened once. The generated route closes it when the endpoint
+ * returns, which is what makes a later read fail loudly instead of reading a recycled buffer.
+ *
+ * [service] arrives as an ordinary parameter rather than a context one because the generated route
+ * calls this *before* entering `respond`'s block, where no [EndpointService] is yet in scope - the
+ * same reason [EndpointMultipartReceiver] takes one.
+ */
+@InternalNomiAPI
+public suspend fun RoutingCall.receiveEndpointBinary(service: EndpointService): EndpointBinary {
+    val declared = try {
+        request.contentType()
+    } catch (_: BadContentTypeFormatException) {
+        context(service) { httpError(HttpStatusCode.BadRequest, "Malformed Content-Type on the request body") }
+    }
+    // contentType() answers ContentType.Any rather than null when the header is absent.
+    val contentType = if (declared == ContentType.Any) ContentType.Application.OctetStream else declared
+
+    val channel = receiveChannel()
+    var opened = false
+    return EndpointBinary(
+        size = request.contentLength(),
+        contentType = contentType,
+        source = {
+            check(!opened) { "The request body has already been read - an EndpointBinary body is single-pass." }
+            opened = true
+            channel.asSource().buffered()
+        },
+    )
 }
 
 /**

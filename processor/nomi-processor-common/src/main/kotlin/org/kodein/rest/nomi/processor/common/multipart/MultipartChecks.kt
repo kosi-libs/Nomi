@@ -147,6 +147,10 @@ public object MultipartChecks {
             reporter.error(property, NomiErrors.partPayloadForbiddenType(partName, forbidden))
             return null
         }
+        if (payloadFq == NomiFq.ENDPOINT_BINARY) {
+            reporter.error(property, NomiErrors.partPayloadIsEndpointBinary(partName))
+            return null
+        }
         if (!GeneralChecks.checkAtLeastAsVisible(payloadType.declaration, user, reporter)) ok = false
 
         val payload = if (payloadFq == NomiFq.ENDPOINT_FILE) {

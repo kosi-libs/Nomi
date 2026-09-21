@@ -324,6 +324,15 @@ public object NomiErrors {
     public fun endpointQueryNameCollidesWithPathParam(endpoint: String, wireName: String): String =
         "endpoint '$endpoint': query parameter '$wireName' collides with a path parameter of the same name along its resource chain"
 
+    public fun endpointBodyIsEndpointFile(endpoint: String): String =
+        "endpoint '$endpoint': EndpointFile is a multipart part, not a request body - use EndpointBinary to stream a whole body"
+
+    public fun partPayloadIsEndpointBinary(part: String): String =
+        "part '$part': EndpointBinary is a whole request body, not a multipart part - use EndpointFile for a part"
+
+    public fun returnValueIsBinary(endpoint: String, type: String): String =
+        "endpoint '$endpoint': '$type' cannot be a success type - Nomi streams a request body, not a response one"
+
     // --- Multipart part types --------------------------------------------------------------------
 
     public fun endpointMultipartAndBody(endpoint: String): String =

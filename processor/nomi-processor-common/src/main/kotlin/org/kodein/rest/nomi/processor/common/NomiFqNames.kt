@@ -13,6 +13,8 @@ public object NomiFq {
     public const val ENDPOINT_SERVICE: String = "org.kodein.rest.nomi.EndpointService"
     public const val MULTIPART: String = "org.kodein.rest.nomi.EndpointService.Multipart"
     public const val ENDPOINT_FILE: String = "org.kodein.rest.nomi.EndpointFile"
+    public const val ENDPOINT_BINARY: String = "org.kodein.rest.nomi.EndpointBinary"
+    public const val ABSTRACT_ENDPOINT_BINARY: String = "org.kodein.rest.nomi.AbstractEndpointBinary"
     public const val INTERNAL_API: String = "org.kodein.rest.nomi.InternalNomiAPI"
     public const val STRINGER: String = "org.kodein.rest.nomi.Stringer"
     public const val BOOLEAN_STRINGER: String = "org.kodein.rest.nomi.Stringer.Builtins.BooleanStringer"
