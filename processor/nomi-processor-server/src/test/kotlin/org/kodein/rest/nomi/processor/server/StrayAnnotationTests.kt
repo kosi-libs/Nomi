@@ -359,4 +359,61 @@ class StrayAnnotationTests {
         )
         assertEquals(KotlinCompilation.ExitCode.OK, result.exitCode, result.errors().joinToString("\n"))
     }
+
+    @Test
+    fun `accepts Endpoint UseStringer on an endpoint function`() {
+        val result = compile(
+            SourceFile.kotlin(
+                "endpoints.kt",
+                """
+                package test
+                import org.kodein.rest.nomi.Endpoint
+                import org.kodein.rest.nomi.EndpointService
+                import org.kodein.rest.nomi.Either
+                import org.kodein.rest.nomi.NoFail
+                import org.kodein.rest.nomi.Stringer
+                import org.kodein.rest.nomi.server.ServerEndpointService
+
+                @Endpoint.Resource
+                interface Res
+
+                @Endpoint.Service
+                interface Svc : EndpointService {
+                    @Endpoint.UseStringer(Int::class, Stringer.Builtins.IntStringer::class)
+                    suspend fun Res.`get`(): Either<Unit, NoFail>
+                }
+
+                @ServerEndpointService("svc")
+                class ServerImpl : Svc {
+                    override suspend fun Res.`get`(): Either<Unit, NoFail> = TODO()
+                }
+                """,
+            ),
+        )
+        assertEquals(KotlinCompilation.ExitCode.OK, result.exitCode, result.errors().joinToString("\n"))
+    }
+
+    @Test
+    fun `rejects Endpoint UseStringer on a function that is not an endpoint`() {
+        val result = compile(
+            SourceFile.kotlin(
+                "endpoints.kt",
+                """
+                package test
+                import org.kodein.rest.nomi.Endpoint
+                import org.kodein.rest.nomi.Stringer
+
+                class Unrelated {
+                    @Endpoint.UseStringer(Int::class, Stringer.Builtins.IntStringer::class)
+                    fun strayFunction() {}
+                }
+                """,
+            ),
+        )
+        assertEquals(KotlinCompilation.ExitCode.COMPILATION_ERROR, result.exitCode)
+        assertTrue(
+            result.errors().any { it.contains("@Endpoint.UseStringer on") && it.contains("strayFunction") },
+            result.errors().toString(),
+        )
+    }
 }

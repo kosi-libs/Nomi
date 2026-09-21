@@ -75,20 +75,25 @@ public annotation class Endpoint(val method: Method) {
     public annotation class Query(val name: String = "")
 
     /**
-     * Registers [with] as the [Stringer] object to use for every [type]-typed path or query
-     * parameter of the annotated resource, service, or annotation class.
+     * Registers [with] as the [Stringer] object to use for every [type]-typed path parameter, query
+     * parameter or multipart part payload in scope of the annotated declaration - a resource, a
+     * service, one endpoint function, a [MultipartFormData] part type, or an annotation class.
      *
      * Applied to an annotation class, it turns that annotation into a carrier: the resolution walk
-     * reads the annotations of a resource or service interface, the annotations on those annotation
+     * reads the annotations of the declaration it starts at, the annotations on those annotation
      * classes, and so on to any depth, which is why a carrier needs `BINARY` or `RUNTIME`
      * retention to survive into the class file. The nearest declaration wins: [Stringed] on the
-     * parameter itself, then the declaring interface and each interface outward, then the
-     * [Stringer.Builtins]. Interface distance always dominates annotation depth (README.adoc §
-     * Resolution order). Since [type] names a raw class, a parameterized type such as `List<Int>`
-     * can only be given a `Stringer` through [Stringed].
+     * parameter itself, then the endpoint function, then the declaring interface and each interface
+     * outward, then the [Stringer.Builtins]. Scope distance always dominates annotation depth
+     * (README.adoc § Resolution order). Since [type] names a raw class, a parameterized type such
+     * as `List<Int>` can only be given a `Stringer` through [Stringed].
+     *
+     * On an endpoint function it reaches that endpoint's query parameters and multipart parts, but
+     * never its receiver resource's path parameters: a resource is analysed on its own, and its
+     * generated factory has one encoding whichever endpoint addresses it.
      */
     @Retention(AnnotationRetention.BINARY)
-    @Target(AnnotationTarget.CLASS, AnnotationTarget.ANNOTATION_CLASS)
+    @Target(AnnotationTarget.CLASS, AnnotationTarget.ANNOTATION_CLASS, AnnotationTarget.FUNCTION)
     @Repeatable
     public annotation class UseStringer(val type: KClass<*>, val with: KClass<out Stringer<*>>)
 

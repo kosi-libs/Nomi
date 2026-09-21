@@ -3,6 +3,7 @@ package org.kodein.rest.nomi.processor.common.service
 import com.google.devtools.ksp.getDeclaredFunctions
 import com.google.devtools.ksp.processing.Resolver
 import com.google.devtools.ksp.symbol.KSClassDeclaration
+import com.google.devtools.ksp.symbol.KSDeclaration
 import com.google.devtools.ksp.symbol.KSFunctionDeclaration
 import org.kodein.rest.nomi.processor.common.Reporter
 import org.kodein.rest.nomi.processor.common.ksp.declaredSupertypes
@@ -75,14 +76,15 @@ public class ServiceAnalyzer(private val resolver: Resolver, private val reporte
     private fun analyzeEndpoint(function: KSFunctionDeclaration, declaringService: KSClassDeclaration): AnalyzedEndpoint? {
         val (resource, method) = EndpointChecks.check(function, declaringService, resourceAnalyzer, resolver, reporter) ?: return null
 
-        // SPECS.adoc § Stringers: an endpoint's Stringer scope starts at the interface that
-        // *declares* it, not the leaf service being analyzed - an endpoint's wire encoding is
-        // fixed where it is written.
-        val scopes = stringerResolver.scopesOf(serviceHierarchy(declaringService))
+        // SPECS.adoc § Stringers: the endpoint function is the nearest scope, then the interface
+        // that *declares* it - not the leaf service being analyzed, since an endpoint's wire
+        // encoding is fixed where it is written.
+        val scopeChain: List<KSDeclaration> = listOf(function) + serviceHierarchy(declaringService)
+        val scopes = stringerResolver.scopesOf(scopeChain)
 
         val (payload, queries) = EndpointParamChecks.check(
             function, method, resource, scopes, stringerResolver, multipartAnalyzer,
-            serviceHierarchy(declaringService), declaringService, reporter,
+            scopeChain, declaringService, reporter,
         ) ?: return null
         val (valueType, errorType) = ReturnTypeChecks.check(function, declaringService, reporter) ?: return null
 

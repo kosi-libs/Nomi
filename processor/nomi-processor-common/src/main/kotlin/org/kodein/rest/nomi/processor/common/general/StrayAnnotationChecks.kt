@@ -87,16 +87,27 @@ public object StrayAnnotationChecks {
         }
     }
 
-    // @Endpoint.UseStringer targets CLASS or ANNOTATION_CLASS - stray unless the class is a
-    // resource, a service, or (as a carrier annotation) an annotation class.
+    // @Endpoint.UseStringer targets CLASS, ANNOTATION_CLASS or FUNCTION - stray unless it lands on
+    // a resource, a service, a multipart part type, a carrier annotation class, or an endpoint
+    // function. No filterIsInstance here: a symbol of the wrong kind must be reported, not dropped.
     private fun checkUseStringer(resolver: Resolver, reporter: Reporter) {
-        for (declaration in resolver.getSymbolsWithAnnotation(NomiFq.USE_STRINGER, inDepth = true).filterIsInstance<KSClassDeclaration>()) {
-            // A part type is a legal carrier too: a part's Stringer scope chain starts there
-            // (SPECS.adoc § Multipart part types).
-            val ok = declaration.isNomiResource() || declaration.isNomiService() ||
-                declaration.isNomiMultipartPartType() || declaration.classKind == ClassKind.ANNOTATION_CLASS
-            if (!ok) {
-                reporter.error(declaration, NomiErrors.strayUseStringerAnnotation(declaration.fq()))
+        for (symbol in resolver.getSymbolsWithAnnotation(NomiFq.USE_STRINGER, inDepth = true)) {
+            when (symbol) {
+                is KSClassDeclaration -> {
+                    // A part type is a legal carrier too: a part payload's Stringer scope chain
+                    // passes through it (SPECS.adoc § Multipart part types).
+                    val ok = symbol.isNomiResource() || symbol.isNomiService() ||
+                        symbol.isNomiMultipartPartType() || symbol.classKind == ClassKind.ANNOTATION_CLASS
+                    if (!ok) reporter.error(symbol, NomiErrors.strayUseStringerAnnotation(symbol.fq()))
+                }
+                is KSFunctionDeclaration -> {
+                    // Only an endpoint has a Stringer scope; an override in a @ServerEndpointService
+                    // class is not one, and its registrations would never be read.
+                    if (!isEndpointFunction(symbol)) {
+                        reporter.error(symbol, NomiErrors.strayUseStringerAnnotation(symbol.fq()))
+                    }
+                }
+                else -> Unit // unreachable given @Endpoint.UseStringer's own @Target
             }
         }
     }

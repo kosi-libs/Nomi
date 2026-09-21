@@ -108,8 +108,9 @@ unsound.
 * *Stray annotations are errors.* A processor collects every symbol carrying a Nomi annotation and
   rejects any it does not consume in that position: `@Endpoint` on a function that is not a service
   endpoint; `@Endpoint.Query` on a parameter of a non-endpoint function; `@Endpoint.Stringed` on
-  anything other than a resource path parameter or an endpoint query parameter; `@Endpoint.UseStringer`
-  on a class that is neither a resource, a service, nor an annotation class.
+  anything other than a resource path parameter, an endpoint query parameter or a multipart part payload;
+  `@Endpoint.UseStringer` on anything other than a resource, a service, an endpoint function, a part type
+  or an annotation class.
 * A use-site target that moves a Nomi annotation off the declaration being read (`@get:Endpoint.Stringed`,
   `@field:Endpoint.Stringed`, …) is an error — reachable only for `@Endpoint.Stringed` on a resource
   property; a plain function parameter (an endpoint's body or query parameter) has no alternate
@@ -188,7 +189,7 @@ method conflict is legal.
   (de)serialized as a whole — see the root README's Wire protocol section).
 * `type` must name a class with no type parameters, and must not be `Unit`, `Nothing`, `Any`, an array, an annotation
   class or a functional type. Enum classes, value classes and ordinary classes are all fine.
-* Two registrations for the same `type` reaching one declaration at the same interface distance and the same
+* Two registrations for the same `type` reaching one declaration at the same scope distance and the same
   annotation depth are an ambiguity error only when they name a different `with`; naming the same `with` twice this
   way is a harmless duplicate and is accepted.
 * Every annotation in a walked carrier-annotation chain must have `BINARY` or `RUNTIME` retention — a `SOURCE`
@@ -196,8 +197,14 @@ method conflict is legal.
   from a dependent one. (A carrier meant to be applied to another annotation must also declare
   `AnnotationTarget.ANNOTATION_CLASS`, but Kotlin itself already rejects a misapplied annotation at its use site, so
   Nomi does not re-check applicability.)
-* `@Endpoint.UseStringer` is collected by walking the full annotation tree reachable from the resource/service
-  interface: its own annotations, the annotations on those annotation classes, and so on to any depth. The walk is
+* A scope is any declaration that may carry `@Endpoint.UseStringer`: an endpoint function, a resource or service
+  interface, a `@Endpoint.MultipartFormData` part type, or a carrier annotation class. A query parameter's scope chain
+  is its endpoint function, then the interface that declares it and each interface outward; a part payload's is the
+  endpoint function, then the part type, then that same interface chain; a path parameter's is the resource chain
+  alone — an endpoint's registration never reaches it, since a resource is analysed once and its generated factory
+  has one encoding.
+* `@Endpoint.UseStringer` is collected by walking the full annotation tree reachable from each scope: its own
+  annotations, the annotations on those annotation classes, and so on to any depth. The walk is
   breadth-first and visits each annotation class at most once, so it terminates on a cyclic annotation reference and
   collapses a diamond into a single visit; each registration is recorded at the shallowest depth it is found at.
 * When no `Stringer` resolves for a type that needs one, the reported error names the type and the property or
@@ -303,7 +310,8 @@ payload.
   properties is an error.
 * A part's payload type is that property's type. `EndpointFile` makes it a *file part*; any other type makes it a
   *value part*, and must have a `Stringer` that resolves — the same resolution as a query parameter's, with the
-  nearest-wins scope starting at the part type and continuing through the service that declares the endpoint.
+  nearest-wins scope starting at the endpoint function, then the part type, then the service that declares the
+  endpoint.
 * The effective part name — ``@Endpoint.MultipartFormData.Part(name)``'s argument, or the subtype's simple name with
   a lowercase first letter when that argument is empty — must be non-blank and match the same
   `[A-Za-z_][A-Za-z0-9_.-]*` pattern a query parameter name must.

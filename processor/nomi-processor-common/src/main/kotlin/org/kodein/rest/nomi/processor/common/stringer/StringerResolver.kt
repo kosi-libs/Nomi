@@ -47,11 +47,12 @@ private fun isLikelyUserAnnotation(fqName: String?): Boolean =
 
 public class StringerResolver(private val resolver: Resolver, private val reporter: Reporter) {
 
-    /** One scope per interface in [scopeChain], nearest (the declaring interface) first. */
-    public fun scopesOf(scopeChain: List<KSClassDeclaration>): List<List<Registration<String, KSClassDeclaration>>> =
+    /** One scope per declaration in [scopeChain], nearest first. A scope is anything that can carry
+     * `@Endpoint.UseStringer`: an endpoint function, a resource or service interface, a part type. */
+    public fun scopesOf(scopeChain: List<KSDeclaration>): List<List<Registration<String, KSClassDeclaration>>> =
         scopeChain.map { registrationsOf(it) }
 
-    private fun registrationsOf(scope: KSClassDeclaration): List<Registration<String, KSClassDeclaration>> {
+    private fun registrationsOf(scope: KSDeclaration): List<Registration<String, KSClassDeclaration>> {
         val found = collectFromAnnotationTree(
             roots = scope.annotations.toList(),
             identityOf = { it.fqName() },

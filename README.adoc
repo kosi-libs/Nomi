@@ -504,8 +504,8 @@ object UuidStringer : Stringer<Uuid> {
 
 === Registering one
 
-Four ways, all equivalent, chosen by how widely the `Stringer` should apply —
-`@Endpoint.UseStringer` is repeatable, so any of the last three can register as many types as you
+Five ways, all equivalent, chosen by how widely the `Stringer` should apply —
+`@Endpoint.UseStringer` is repeatable, so any of the last four can register as many types as you
 need from a single place:
 
 .On the property or query parameter itself
@@ -514,6 +514,16 @@ need from a single place:
 @Endpoint.Resource interface Article {
     @Endpoint.Stringed(with = UuidStringer::class)
     val articleId: Uuid
+}
+----
+
+.On one endpoint — its query parameters and multipart parts, not its receiver's path parameters
+[source,kotlin]
+----
+@Endpoint.Service
+interface ArticlesService : EndpointService {
+    @Endpoint.UseStringer(Instant::class, EpochMillisStringer::class)
+    suspend fun Articles.get(@Endpoint.Query since: Instant? = null): Either<List<ArticleSummary>?, NoFail>
 }
 ----
 
@@ -562,12 +572,18 @@ carries every `Stringer` a project shares between its resources and services.
 The nearest declaration wins:
 
 . `@Endpoint.Stringed` on the property, query parameter or multipart part payload itself.
+. Otherwise, the endpoint function, for a query parameter or a multipart part payload.
+. Otherwise, the part type, for a multipart part payload.
 . Otherwise, the declaring interface and each interface outward — nearest first — checked for an
   `@Endpoint.UseStringer` reachable from its own annotation tree.
 . Otherwise, the built-in `Stringer` for `Boolean`, `Int`, `Long` or `String`.
 
-Interface distance always dominates annotation depth: a registration on a nearer interface wins
-over one on a farther interface, however many carrier annotations either is reached through.
+Scope distance always dominates annotation depth: a registration on a nearer scope wins over one on
+a farther scope, however many carrier annotations either is reached through.
+
+An endpoint function's registration reaches that endpoint's query parameters and multipart parts,
+but never its receiver resource's path parameters — a resource is analysed on its own, and the
+factory generated for it has one encoding whichever endpoint addresses it.
 
 [#multipart-form-data]
 == Multipart form data
@@ -602,7 +618,7 @@ sealed interface ToolsPostData {
 
 A payload typed `EndpointFile` makes a _file part_; any other type makes a _value part_, and needs
 a `Stringer` exactly as a query parameter does (see <<stringers,Stringers>>) — resolved from the
-part type outward, so `@Endpoint.UseStringer` on the part type itself is the nearest scope.
+endpoint function, then the part type, then outward through the declaring service.
 
 A part's name on the wire is the subclass's own name with a lowercase first letter — `file`,
 `from` — or ``@Endpoint.MultipartFormData.Part``'s `name` argument when you give one, as `With`

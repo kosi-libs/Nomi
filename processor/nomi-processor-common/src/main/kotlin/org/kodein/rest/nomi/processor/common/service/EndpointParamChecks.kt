@@ -38,7 +38,7 @@ public object EndpointParamChecks {
         scopes: List<List<Registration<String, KSClassDeclaration>>>,
         stringerResolver: StringerResolver,
         multipartAnalyzer: MultipartAnalyzer,
-        serviceScopeChain: List<KSClassDeclaration>,
+        scopeChain: List<KSDeclaration>,
         user: KSDeclaration,
         reporter: Reporter,
     ): Pair<RequestPayload?, List<QueryParam>>? {
@@ -62,7 +62,7 @@ public object EndpointParamChecks {
                     continue
                 }
                 val checked = checkPayload(
-                    param, paramName, method, multipartAnalyzer, serviceScopeChain, user, endpointName, reporter,
+                    param, paramName, method, multipartAnalyzer, scopeChain, user, endpointName, reporter,
                 )
                 if (checked == null) ok = false else payload = checked
             } else {
@@ -83,7 +83,7 @@ public object EndpointParamChecks {
         paramName: String,
         method: HttpMethod,
         multipartAnalyzer: MultipartAnalyzer,
-        serviceScopeChain: List<KSClassDeclaration>,
+        scopeChain: List<KSDeclaration>,
         user: KSDeclaration,
         endpointName: String,
         reporter: Reporter,
@@ -92,7 +92,7 @@ public object EndpointParamChecks {
         if (rawType.isError) return null // deferred to the next round, not a validation error
         val isMultipart = rawType.expandTypealias().declaration.qualifiedName?.asString() == NomiFq.MULTIPART
         return if (isMultipart) {
-            checkMultipart(param, paramName, method, multipartAnalyzer, serviceScopeChain, user, endpointName, reporter)
+            checkMultipart(param, paramName, method, multipartAnalyzer, scopeChain, user, endpointName, reporter)
         } else {
             checkBody(param, paramName, method, user, endpointName, reporter)
         }
@@ -103,7 +103,7 @@ public object EndpointParamChecks {
         paramName: String,
         method: HttpMethod,
         multipartAnalyzer: MultipartAnalyzer,
-        serviceScopeChain: List<KSClassDeclaration>,
+        scopeChain: List<KSDeclaration>,
         user: KSDeclaration,
         endpointName: String,
         reporter: Reporter,
@@ -146,7 +146,7 @@ public object EndpointParamChecks {
         }
         if (!GeneralChecks.checkAtLeastAsVisible(partType, user, reporter)) ok = false
 
-        val analyzed = multipartAnalyzer.analyze(partType, serviceScopeChain, user) ?: return null
+        val analyzed = multipartAnalyzer.analyze(partType, scopeChain, user) ?: return null
 
         return if (ok) MultipartParam(param, paramName, analyzed) else null
     }

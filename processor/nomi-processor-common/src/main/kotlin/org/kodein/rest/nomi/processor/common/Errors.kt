@@ -41,8 +41,8 @@ public object NomiErrors {
     public fun strayStringedAnnotation(name: String): String =
         "@Endpoint.Stringed on '$name' is a stray annotation - it is neither a resource path parameter nor an endpoint query parameter"
 
-    public fun strayUseStringerAnnotation(className: String): String =
-        "@Endpoint.UseStringer on '$className' is a stray annotation - it is neither a resource, a service, nor an annotation class"
+    public fun strayUseStringerAnnotation(name: String): String =
+        "@Endpoint.UseStringer on '$name' is a stray annotation - it is none of a resource, a service, an endpoint function, a multipart part type, nor an annotation class"
 
     // --- Resource declarations -----------------------------------------------------------------
 
