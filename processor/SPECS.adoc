@@ -264,6 +264,13 @@ method conflict is legal.
   the value read at that name ambiguous.
 * Every endpoint parameter name must be a plain identifier, since it is reproduced as a named argument in generated
   code.
+* A parameter typed `EndpointService.Multipart<T>` is the request body in `multipart/form-data` form, and obeys every
+  body rule above: it must be first and unannotated, is allowed only on `Post`, `Put` or `Patch`, and must not be
+  `vararg`, have a default value, be nullable, or carry `@Endpoint.Query` or `@Endpoint.Stringed`.
+* An endpoint declares either an ordinary body or a `Multipart<T>` parameter, never both.
+* `T` must be a part type — an interface annotated `@Endpoint.MultipartFormData`, see
+  <<multipart-part-types,Multipart part types>>. A star projection, a type parameter, or a type without that
+  annotation is an error.
 
 === Endpoint return types
 
@@ -280,6 +287,57 @@ method conflict is legal.
   overlap between `V` and `E` would make a failure indistinguishable from a value at runtime.
 * `V` may be `Unit`, or nullable — both cases answer `204 No Content` (see the root README's Wire protocol section).
 * `NoFail` must not be used as `V`.
+
+[#multipart-part-types]
+=== Multipart part types (`@Endpoint.MultipartFormData`)
+
+A part type names the parts a `multipart/form-data` body may carry, one part per direct subtype, and is what a
+`Multipart<T>` endpoint parameter is parameterized by. The subtype is the part; its single property is the part's
+payload.
+
+* Must be a `sealed interface`; a class, an abstract class, an enum, an object or a non-sealed interface is an error.
+* Must declare at least one part.
+* Every part must be a *direct subtype nested inside the part type itself*.
+* Every part must be a `data class` with exactly one `val` primary-constructor property, declaring no further
+  property and no type parameter. An `object`, a further `sealed` level, or a subtype with zero or several
+  properties is an error.
+* A part's payload type is that property's type. `EndpointFile` makes it a *file part*; any other type makes it a
+  *value part*, and must have a `Stringer` that resolves — the same resolution as a query parameter's, with the
+  nearest-wins scope starting at the part type and continuing through the service that declares the endpoint.
+* The effective part name — ``@Endpoint.MultipartFormData.Part(name)``'s argument, or the subtype's simple name with
+  a lowercase first letter when that argument is empty — must be non-blank and match the same
+  `[A-Za-z_][A-Za-z0-9_.-]*` pattern a query parameter name must.
+* Two parts of the same part type must not resolve to the same effective name.
+* ``@Endpoint.MultipartFormData.Part``'s `presence` fixes the part's cardinality, defaulting to
+  `PartPresence.Required`. It drives both the generated builder's parameter shape and what the server enforces:
+
+[cols="1,1,2,2"]
+|===
+| `PartPresence` | Cardinality | Builder parameter | Server
+
+| `Required`
+| Exactly one
+| `p: T`
+| `400` when absent, and on a second occurrence
+
+| `Optional`
+| Zero or one
+| `p: T? = null`
+| `400` on a second occurrence
+
+| `RepeatedRequired`
+| One or more
+| `p: List<T>`
+| `400` when absent
+
+| `RepeatedOptional`
+| Zero or more
+| `p: List<T> = emptyList()`
+| never rejected on cardinality
+|===
+
+A part name the peer sends that the endpoint does not declare is a `400`, raised by the generated `when`'s `else`
+branch — a part type is a closed set, not a prefix of one.
 
 [#server-implementations-serverendpointservice]
 === Server implementations (`@ServerEndpointService`)
@@ -320,6 +378,10 @@ method conflict is legal.
 * A resource's generated factory function is top-level for a root resource, or an extension of the parent resource
   for a nested one. No two generated factory functions may collide on (receiver, name).
 * A client implementation, named `Nomi<Object><Service>Client`, must be unique per package.
+* A part type's generated builder is an extension on the `@ClientEndpointServiceFactory` object, named `multipart`
+  followed by the simple names of the part type and of every declaration it is nested in, outermost first. Two part
+  types reached from the same factory object must not produce the same builder name this way, and a builder must not
+  collide with a resolvable user declaration on that object.
 * Generated file names must be unique per package.
 * A generated declaration must not collide with a resolvable user declaration in the same package.
 
@@ -388,6 +450,9 @@ public fun Users.User.Posts.Post(postId: Uuid): Users.User.Posts.Post = NomiUser
 ----
 
 The `context(_: EndpointService)` context parameter ensures that a resource can only be built inside a service call.
+
+A `@Endpoint.MultipartFormData` part type needs nothing from this processor: its parts are written by the user, and
+its builder is emitted by the client processor, which is the only side that may name `ListMultipart`.
 
 === Server processor
 
@@ -460,6 +525,50 @@ under the `@InternalNomiAPI` optin annotation:
 * `decodeRequired(stringer, name, value: String?)` decodes a required query parameter, and raises `400 Bad Request`
   when it is absent.
 
+An endpoint taking a `Multipart<T>` reads `call.receiveMultipart()` instead of `call.receive()`, and wraps it in an
+`EndpointMultipartReceiver` carrying the part-presence map from the declaration and a transform that decodes one
+`PartData` into a part:
+
+[source,kotlin]
+----
+post {
+    call.respond(service) {
+        NomiTools.post(
+            EndpointMultipartReceiver(
+                service = this,
+                multipart = call.receiveMultipart(),
+                parts = mapOf(
+                    "file" to PartPresence.Required,
+                    "from" to PartPresence.Optional,
+                    "article" to PartPresence.RepeatedRequired,
+                ),
+            ) {
+                when (it.name) {
+                    "file" -> ToolsPostData.File(it.asEndpointFile("file"))
+                    "from" -> ToolsPostData.From(it.asEndpointValue("from", UuidStringer))
+                    "article" -> ToolsPostData.With(it.asEndpointValue("article", ArticleContentJsonStringer))
+                    else -> httpError(HttpStatusCode.BadRequest, "Unknown part '${it.name}'")
+                }
+            }
+        )
+    }
+}
+----
+
+The transform dispatches on the *part name*, not on the subtype, and is keyed by the effective name — `"article"`
+above, whose subtype is `With`. `EndpointMultipartReceiver` is what enforces cardinality, per the table in
+<<multipart-part-types,Multipart part types>>; the `else` branch is what rejects a part the endpoint never declared.
+
+Two more runtime functions, also under `@InternalNomiAPI`:
+
+* `asEndpointFile(name)` decodes a file part into an `EndpointFile`, and raises `400 Bad Request` when the part is
+  not a file or carries no filename. It is a member of `PartScope`, the transform's receiver — which is what ties the
+  file's lifetime to its part — so it needs no import.
+* `asEndpointValue(name, stringer)` decodes a value part through its `Stringer`, and raises `400 Bad Request` when
+  the part is not a form item, when its declared `Content-Type` contradicts the ``Stringer``'s, or when decoding
+  fails. A part carrying no `Content-Type` at all is accepted: RFC 7578 makes the header optional, and a browser
+  omits it for an ordinary form field.
+
 === Client processor
 
 For each `@ClientEndpointServiceFactory` annotated object, the client processor generates, in the same package:
@@ -520,6 +629,71 @@ public fun APIServices.users(client: HttpClient): ServiceCaller<UsersService> =
 A resource path that mixes literal text and a parameter inside a single segment (such as `p:{postId}`) is rendered as
 the concatenation of that literal text and the encoded parameter, in a single path segment.
 
+The client processor also generates a *builder* for every part type reached through a `Multipart<T>` parameter of
+any service the annotated object exposes. A builder is an extension on that object — not on the part type, which is
+therefore free of any `companion object` requirement — named `multipart` followed by the part type's name per
+<<generated-name-collisions,Generated-name collisions>>. It takes one parameter per part, named after the *subtype's*
+simple name lowercased, whose type and default come from the part's presence per the table in
+<<multipart-part-types,Multipart part types>>.
+
+Builders are collected *per annotated object, by part type*:
+
+* Two services registered on the *same* object that use the same part type yield **one** builder — the object is the
+  unit of deduplication, not the service.
+* The same part type reached from two *different* objects yields **two** builders, one on each, since each object
+  owns the API surface its own users see.
+
+An endpoint taking a `Multipart<T>` encodes it by draining it into ktor's `formData`, dispatching on the sealed
+subtype:
+
+[source,kotlin]
+----
+@OptIn(InternalNomiAPI::class)
+public fun APIServices.multipartToolsPostData(
+    file: EndpointFile,
+    from: Uuid? = null,
+    with: List<ArticleContent>,
+): EndpointService.Multipart<ToolsPostData> =
+    ListMultipart(
+        buildList {
+            add(ToolsPostData.File(file))
+            if (from != null) {
+                add(ToolsPostData.From(from))
+            }
+            require(with.isNotEmpty()) { "with is required" }
+            addAll(with.map { ToolsPostData.With(it) })
+        }
+    )
+
+override suspend fun Tools.post(parts: EndpointService.Multipart<ToolsPostData>): Either<Unit, NoFail> =
+    client.call(
+        pathSegments = listOf("tools"),
+        method = Post,
+    ) {
+        setBody(
+            MultiPartFormDataContent(
+                formData {
+                    parts.forEachPart { part ->
+                        when (part) {
+                            is ToolsPostData.File -> appendEndpointFile("file", part.file)
+                            is ToolsPostData.From -> appendEndpointItem("from", part.from, UuidStringer)
+                            is ToolsPostData.With -> appendEndpointItem("article", part.content, ArticleContentJsonStringer)
+                        }
+                    }
+                }
+            )
+        )
+    }
+----
+
+Note the two different keys at play: the builder's *parameter* is named after the subtype (`with`), while the part it
+is encoded under is the effective *part name* (`"article"`). The `when` is exhaustive and carries no `else`.
+
+`appendEndpointFile` and `appendEndpointItem` are runtime functions under `@InternalNomiAPI`, and `ListMultipart` is
+the runtime's `Multipart<T>` over a plain list. A `Multipart<T>` is a single-pass stream in both directions: the
+generated client drains the caller's one while building the body, and consuming one twice fails rather than quietly
+sending nothing.
+
 == Testing strategy
 
 . *Pure logic*, in `nomi-processor-common`'s own `src/test`, using plain `kotlin-test-junit` —
@@ -535,8 +709,9 @@ the concatenation of that literal text and the encoded parameter, in a single pa
 +
 * The `@Endpoint.Resource`/`Stringer` rule set is exercised end-to-end in
   ``nomi-processor-shared``'s `src/test`.
-* The `@Endpoint.Service`/endpoint-function rule set is exercised end-to-end in
-  ``nomi-processor-server``'s `src/test` instead, alongside that module's own
+* The `@Endpoint.Service`/endpoint-function rule set — including
+  <<multipart-part-types,Multipart part types>>, which a `Multipart<T>` endpoint parameter pulls
+  in — is exercised end-to-end in ``nomi-processor-server``'s `src/test` instead, alongside that module's own
   `@ServerEndpointService` rules — the server processor was the _first_ reader of those
   declarations, so its tests double as ``ServiceAnalyzer``'s proof. ``nomi-processor-client``'s own
   tests deliberately don't re-prove this rule set — they cover only
@@ -582,6 +757,24 @@ the concatenation of that literal text and the encoded parameter, in a single pa
   whether any property in scope ends up matching it — the <<deliberately-not-verified,Deliberately
   not verified>> list excuses an _unused_ registration from scrutiny, not a structurally invalid
   one. Re-validating again at resolution time would just double-report the same problem.
+* *``@Endpoint.Stringed`` on a part's property binds to the constructor _parameter_, not the property.* A part is a
+  `data class` whose payload is a primary-constructor `val`, and Kotlin's applicable-target priority puts `param`
+  ahead of `property` — so the annotation arrives as a `KSValueParameter` whose parent is a constructor, not as a
+  `KSPropertyDeclaration`. `StrayAnnotationChecks` must accept that position, or users are forced to write
+  `@property:Endpoint.Stringed(…)`.
+* *``asEndpointFile`` must not be imported; `asEndpointValue` must.* The first is a member extension of `PartScope`,
+  the transform's receiver, and resolves inside the transform lambda with no import at all — emitting one is an
+  unresolved reference. The second is top-level and needs its import like any other runtime function.
+* *A part contributes `Content-Disposition` _parameters_ only.* ktor's `formData` writes
+  `Content-Disposition: form-data; name="<key>"` itself and appends anything a part adds as a further value of the
+  same header, which `MultiPartFormDataContent` then joins with `"; "`. A part that contributes a disposition of its
+  own — even an empty one — puts a second, or a stray, `form-data` token in the middle of the header.
+* *The generated `when` over a sealed part type carries no `else`*, so it is coupled to the compiler's
+  exhaustiveness check rather than to a Nomi diagnostic: should a processor's view of the hierarchy ever diverge from
+  the compiler's, the user sees `'when' expression must be exhaustive` inside generated source.
+* *Both `formData` and `forEachPart` are `inline`.* That is the only reason the generated client can drain a
+  `Multipart<T>` — a `suspend` operation — inside ``formData``'s non-suspending `FormBuilder.() -> Unit` lambda. A
+  future ktor release dropping `inline` from `formData` breaks every generated client.
 * *User-declaration collision checks must compare file _paths_, not file _names_.* Once KSP starts
   a second round, its own previously-generated output becomes resolvable through the same
   `Resolver` calls used to detect collisions with hand-written user code. Comparing the colliding

@@ -116,7 +116,13 @@ public annotation class Endpoint(val method: Method) {
             Optional, // Zero or one
             Required, // Exactly one
             RepeatedOptional, // Zero, one, or more
-            RepeatedRequired, // One or more
+            RepeatedRequired; // One or more
+
+            /** Whether the part must occur at least once: the server answers `400` if it never does. */
+            public val isRequired: Boolean get() = this == Required || this == RepeatedRequired
+
+            /** Whether the part may occur more than once: the server answers `400` on a second one if not. */
+            public val isRepeated: Boolean get() = this == RepeatedOptional || this == RepeatedRequired
         }
     }
 }

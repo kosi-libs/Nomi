@@ -43,6 +43,4 @@ sealed interface ToolsPostData {
         val content: ArticleContent,
     ) : ToolsPostData
 
-    companion object
-
 }

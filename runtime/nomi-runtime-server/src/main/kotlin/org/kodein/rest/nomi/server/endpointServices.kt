@@ -11,6 +11,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.io.buffered
 import org.kodein.rest.nomi.Either
 import org.kodein.rest.nomi.EndpointFile
+import org.kodein.rest.nomi.Endpoint.MultipartFormData.PartPresence
 import org.kodein.rest.nomi.EndpointService
 import org.kodein.rest.nomi.Error
 import org.kodein.rest.nomi.InternalNomiAPI
@@ -163,15 +164,22 @@ public fun PartData.matchesPartContentType(expected: ContentType): Boolean {
     return declared.match(expected)
 }
 
+/**
+ * Reads a `multipart/form-data` body as the values of [T], enforcing the cardinality each part was
+ * declared with.
+ *
+ * [parts] maps every part name the endpoint declares to its [PartPresence]; a name absent from it
+ * is unknown to the endpoint, and is [transform]'s to reject.
+ */
 @InternalNomiAPI
 public class EndpointMultipartReceiver<T : Any>(
     private val service: EndpointService,
     private val multipart: MultiPartData,
-    private val requiredParts: List<String>,
+    private val parts: Map<String, PartPresence>,
     private val transform: suspend PartScope.(PartData) -> T
 ) : EndpointService.Multipart<T> {
 
-    private val receivedParts = mutableListOf<String>()
+    private val counts = mutableMapOf<String, Int>()
     private var exhausted = false
 
     override suspend fun readPart(): EndpointService.Multipart.Part<T>? {
@@ -180,7 +188,13 @@ public class EndpointMultipartReceiver<T : Any>(
             return null
         }
         val partName = part.name ?: context(service) { httpError(HttpStatusCode.BadRequest, "Unsupported part without name") }
-        receivedParts.add(partName)
+        val count = (counts[partName] ?: 0) + 1
+        counts[partName] = count
+        // An unknown name has no declared presence; rejecting it is transform's job, not ours.
+        val presence = parts[partName]
+        if (count > 1 && presence != null && !presence.isRepeated) {
+            context(service) { httpError(HttpStatusCode.BadRequest, "Part '$partName' must not be repeated") }
+        }
         val scope = PartScope(service)
         return EndpointService.Multipart.Part(
             value = scope.transform(part),
@@ -192,8 +206,10 @@ public class EndpointMultipartReceiver<T : Any>(
     }
 
     override suspend fun validateRequiredParts() {
-        requiredParts.forEach {
-            if (it !in receivedParts) context(service) { httpError(HttpStatusCode.BadRequest, "Missing required part '$it'") }
+        parts.forEach { (name, presence) ->
+            if (presence.isRequired && name !in counts) {
+                context(service) { httpError(HttpStatusCode.BadRequest, "Missing required part '$name'") }
+            }
         }
     }
 

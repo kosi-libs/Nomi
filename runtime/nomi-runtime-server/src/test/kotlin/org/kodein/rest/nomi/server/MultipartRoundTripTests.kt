@@ -19,6 +19,7 @@ import io.ktor.server.testing.testApplication
 import kotlinx.io.Buffer
 import kotlinx.io.readString
 import org.kodein.rest.nomi.Either
+import org.kodein.rest.nomi.Endpoint.MultipartFormData.PartPresence
 import org.kodein.rest.nomi.EndpointFile
 import org.kodein.rest.nomi.EndpointService
 import org.kodein.rest.nomi.InternalNomiAPI
@@ -45,7 +46,10 @@ private fun RoundTripService.receiver(multipart: MultiPartData): EndpointService
     EndpointMultipartReceiver(
         service = this,
         multipart = multipart,
-        requiredParts = listOf("file", "from"),
+        parts = mapOf(
+            "file" to PartPresence.RepeatedRequired,
+            "from" to PartPresence.Required,
+        ),
     ) { part ->
         when (part.name) {
             "file" -> RoundTripPart.File(part.asEndpointFile("file"))

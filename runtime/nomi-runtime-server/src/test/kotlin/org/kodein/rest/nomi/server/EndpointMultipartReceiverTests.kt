@@ -9,6 +9,7 @@ import io.ktor.http.content.PartData
 import io.ktor.utils.io.ByteReadChannel
 import kotlinx.coroutines.test.runTest
 import kotlinx.io.readString
+import org.kodein.rest.nomi.Endpoint.MultipartFormData.PartPresence
 import org.kodein.rest.nomi.EndpointFile
 import org.kodein.rest.nomi.EndpointService
 import org.kodein.rest.nomi.InternalNomiAPI
@@ -63,19 +64,22 @@ private class FakeMultiPartData(parts: List<PartData>) : MultiPartData {
 @OptIn(InternalNomiAPI::class)
 private fun receiver(
     parts: List<TrackedPart>,
-    required: List<String>,
+    declared: Map<String, PartPresence>,
 ): EndpointService.Multipart<String> = EndpointMultipartReceiver(
     service = MultipartFakeService(),
     multipart = FakeMultiPartData(parts.map { it.data }),
-    requiredParts = required,
+    parts = declared,
 ) { part -> (part as PartData.FormItem).value }
+
+/** Every named part required exactly once - the shape most of these tests want. */
+private fun required(vararg names: String) = names.associateWith { PartPresence.Required }
 
 /** A receiver of one file part, decoding it the way a generated route does. */
 @OptIn(InternalNomiAPI::class)
 private fun fileReceiver(part: TrackedPart): EndpointService.Multipart<EndpointFile> = EndpointMultipartReceiver(
     service = MultipartFakeService(),
     multipart = FakeMultiPartData(listOf(part.data)),
-    requiredParts = emptyList(),
+    parts = emptyMap(),
 ) { it.asEndpointFile("file") }
 
 class EndpointMultipartReceiverTests {
@@ -85,7 +89,7 @@ class EndpointMultipartReceiverTests {
         val parts = listOf(TrackedPart("file", "F"), TrackedPart("from", "S"))
         val seen = mutableListOf<String>()
 
-        receiver(parts, required = listOf("file", "from")).forEachPart { seen += it }
+        receiver(parts, declared = required("file", "from")).forEachPart { seen += it }
 
         assertEquals(listOf("F", "S"), seen)
     }
@@ -95,7 +99,7 @@ class EndpointMultipartReceiverTests {
         val parts = listOf(TrackedPart("file", "F"))
 
         val ex = assertFailsWith<EndpointStatusCodeException> {
-            receiver(parts, required = listOf("file", "from")).forEachPart { }
+            receiver(parts, declared = required("file", "from")).forEachPart { }
         }
 
         assertEquals(HttpStatusCode.BadRequest, ex.code)
@@ -109,7 +113,7 @@ class EndpointMultipartReceiverTests {
         // The endpoint decides it has seen enough after the first part. 'from' is required and will
         // never be read - that must NOT be reported as a malformed request.
         val first = run {
-            receiver(parts, required = listOf("file", "from")).forEachPart { return@run it }
+            receiver(parts, declared = required("file", "from")).forEachPart { return@run it }
             null
         }
 
@@ -123,7 +127,7 @@ class EndpointMultipartReceiverTests {
         val parts = listOf(TrackedPart("file", "F"), TrackedPart("from", "S"))
 
         assertFailsWith<IllegalStateException> {
-            receiver(parts, required = listOf("file", "from")).forEachPart { error("boom") }
+            receiver(parts, declared = required("file", "from")).forEachPart { error("boom") }
         }
 
         assertTrue(parts[1].released, "unread part 'from' should have been released")
@@ -136,7 +140,7 @@ class EndpointMultipartReceiverTests {
         // and released on the way out - not merely that everything is released by the end.
         val releasedDuringHandler = mutableListOf<List<Boolean>>()
 
-        receiver(parts, required = emptyList()).forEachPart {
+        receiver(parts, declared = emptyMap()).forEachPart {
             releasedDuringHandler += parts.map { part -> part.released }
         }
 
@@ -155,7 +159,7 @@ class EndpointMultipartReceiverTests {
         val parts = listOf(TrackedPart("file", "F"), TrackedPart("from", "S"), TrackedPart("article", "A"))
 
         run {
-            receiver(parts, required = listOf("file", "from")).forEachPart { return@run }
+            receiver(parts, declared = required("file", "from")).forEachPart { return@run }
         }
 
         assertEquals(listOf(1, 1, 1), parts.map { it.releaseCount })
@@ -177,5 +181,47 @@ class EndpointMultipartReceiverTests {
             "must be consumed inside forEachPart" in (ex.message ?: ""),
             "the message should say what the endpoint did wrong, was: ${ex.message}",
         )
+    }
+
+    @Test
+    fun `a part that may not repeat is rejected on its second occurrence`() = runTest {
+        val parts = listOf(TrackedPart("file", "F"), TrackedPart("file", "G"))
+
+        val ex = assertFailsWith<EndpointStatusCodeException> {
+            receiver(parts, declared = required("file")).forEachPart { }
+        }
+
+        assertEquals(HttpStatusCode.BadRequest, ex.code)
+        assertEquals("Part 'file' must not be repeated", ex.message)
+    }
+
+    @Test
+    fun `a repeated part is accepted as many times as it occurs`() = runTest {
+        val parts = listOf(TrackedPart("file", "F"), TrackedPart("file", "G"))
+        val seen = mutableListOf<String>()
+
+        receiver(parts, declared = mapOf("file" to PartPresence.RepeatedRequired)).forEachPart { seen += it }
+
+        assertEquals(listOf("F", "G"), seen)
+    }
+
+    @Test
+    fun `a repeated required part that never occurs is a missing part`() = runTest {
+        val ex = assertFailsWith<EndpointStatusCodeException> {
+            receiver(emptyList(), declared = mapOf("file" to PartPresence.RepeatedRequired)).forEachPart { }
+        }
+
+        assertEquals(HttpStatusCode.BadRequest, ex.code)
+        assertEquals("Missing required part 'file'", ex.message)
+    }
+
+    @Test
+    fun `an optional part that never occurs is accepted, repeated or not`() = runTest {
+        val declared = mapOf(
+            "from" to PartPresence.Optional,
+            "article" to PartPresence.RepeatedOptional,
+        )
+
+        receiver(emptyList(), declared = declared).forEachPart { }
     }
 }

@@ -3,6 +3,7 @@ package org.kodein.rest.nomi.demo.server
 import io.ktor.http.*
 import io.ktor.server.request.*
 import io.ktor.server.routing.*
+import org.kodein.rest.nomi.Endpoint.MultipartFormData.PartPresence
 import org.kodein.rest.nomi.InternalNomiAPI
 import org.kodein.rest.nomi.demo.shared.ArticleContentJsonStringer
 import org.kodein.rest.nomi.demo.shared.MPService
@@ -22,12 +23,15 @@ fun Route.mp(service: MPService) {
     route("/tools") {
         post {
             call.respond(service) {
-                val multipart = call.receiveMultipart()
                 NomiTools.post(
                     EndpointMultipartReceiver(
                         service = this,
-                        multipart = multipart,
-                        requiredParts = listOf("file", "from"),
+                        multipart = call.receiveMultipart(),
+                        parts = mapOf(
+                            "file" to PartPresence.Required,
+                            "from" to PartPresence.Optional,
+                            "article" to PartPresence.RepeatedRequired,
+                        ),
                     ) {
                         when (it.name) {
                             "file" -> ToolsPostData.File(it.asEndpointFile("file"))

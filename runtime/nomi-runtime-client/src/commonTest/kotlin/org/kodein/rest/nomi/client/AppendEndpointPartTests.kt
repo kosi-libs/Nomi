@@ -95,7 +95,7 @@ class AppendEndpointPartTests {
     }
 
     @Test
-    fun `an item part carries only the form-data disposition, plus its Content-Type`() = runTest {
+    fun `an item part carries only the form-data disposition plus its Content-Type`() = runTest {
         val content = with(fake) {
             MultiPartFormDataContent(
                 formData { appendEndpointItem("from", "me", Stringer.Builtins.StringStringer) }

@@ -1,8 +1,12 @@
-package org.kodein.rest.nomi
+package org.kodein.rest.nomi.client
 
 import kotlinx.coroutines.test.runTest
 import kotlinx.io.Buffer
 import kotlinx.io.readString
+import org.kodein.rest.nomi.EndpointFile
+import org.kodein.rest.nomi.EndpointService
+import org.kodein.rest.nomi.InternalNomiAPI
+import org.kodein.rest.nomi.forEachPart
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -19,14 +23,14 @@ private fun endpointFile(content: String) = EndpointFile(
 )
 
 @OptIn(InternalNomiAPI::class)
-class MultipartOfTests {
+class ListMultipartTests {
 
     private suspend fun <T : Any> EndpointService.Multipart<T>.toList(): List<T> =
         mutableListOf<T>().also { out -> forEachPart { out += it } }
 
     @Test
     fun `yields its parts in order`() = runTest {
-        val parts = multipartOf(Upload.From("me"), Upload.From("you")).toList()
+        val parts = ListMultipart(listOf(Upload.From("me"), Upload.From("you"))).toList()
 
         assertEquals(listOf(Upload.From("me"), Upload.From("you")), parts)
     }
@@ -37,27 +41,19 @@ class MultipartOfTests {
         val a = endpointFile("a")
         val b = endpointFile("b")
 
-        val parts = multipartOf(Upload.File(a), Upload.From("me"), Upload.File(b)).toList()
+        val parts = ListMultipart(listOf(Upload.File(a), Upload.From("me"), Upload.File(b))).toList()
 
         assertEquals(listOf(Upload.File(a), Upload.From("me"), Upload.File(b)), parts)
     }
 
     @Test
     fun `an empty multipart yields nothing`() = runTest {
-        assertEquals(emptyList(), multipartOf<Upload>().toList())
-    }
-
-    @Test
-    fun `the vararg and list overloads agree`() = runTest {
-        val listed = multipartOf(listOf(Upload.From("me"), Upload.From("you"))).toList()
-        val varargs = multipartOf(Upload.From("me"), Upload.From("you")).toList()
-
-        assertEquals(listed, varargs)
+        assertEquals(emptyList(), ListMultipart(emptyList<Upload>()).toList())
     }
 
     @Test
     fun `consuming it twice fails instead of quietly sending nothing`() = runTest {
-        val parts = multipartOf(Upload.From("me"))
+        val parts = ListMultipart(listOf(Upload.From("me")))
         assertEquals(listOf(Upload.From("me")), parts.toList())
 
         val ex = assertFailsWith<IllegalStateException> { parts.toList() }
@@ -73,7 +69,7 @@ class MultipartOfTests {
         // the caller's file is still theirs to use.
         val file = endpointFile("hello")
 
-        multipartOf(Upload.File(file)).toList()
+        ListMultipart(listOf(Upload.File(file))).toList()
 
         assertEquals("hello", file.source().use { it.readString() })
     }

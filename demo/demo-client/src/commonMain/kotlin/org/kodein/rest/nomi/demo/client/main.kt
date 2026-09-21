@@ -69,7 +69,7 @@ suspend fun main() {
 
     APIServices.mp(client).call {
         Tools().post(
-            ToolsPostData.multipart(
+            APIServices.multipartToolsPostData(
                 file = EndpointFile(
                     fileName = "foo.txt",
                     fileSize = 8,

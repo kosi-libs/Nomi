@@ -29,7 +29,7 @@ import kotlin.uuid.Uuid
 // Generated
 
 @OptIn(InternalNomiAPI::class)
-fun ToolsPostData.Companion.multipart(
+fun APIServices.multipartToolsPostData(
     file: EndpointFile,
     from: Uuid? = null,
     with: List<ArticleContent>,
