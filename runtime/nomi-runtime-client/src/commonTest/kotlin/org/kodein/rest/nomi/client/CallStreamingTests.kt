@@ -20,6 +20,7 @@ import org.kodein.rest.nomi.InternalNomiAPI
 import org.kodein.rest.nomi.mapValue
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -34,9 +35,9 @@ private data class StreamFail(val reason: String) : Error
 @OptIn(InternalNomiAPI::class)
 private class StreamingService(
     private val client: HttpClient,
-    override val buildRequest: ServiceCaller.KtorRequestBuilder?,
-    override val streamingHandler: ServiceCaller.StreamingResponseHandler<*, *, *>?,
-) : NomiClientEndpointService {
+    buildRequest: ServiceCaller.KtorRequestBuilder?,
+    streamingHandler: ServiceCaller.StreamingResponseHandler<*, *, *>?,
+) : NomiClientEndpointService(buildRequest, streamingHandler) {
     suspend fun get(): Either<StreamPayload, StreamFail> = client.call(listOf("thing"), HttpMethod.Get)
 }
 
@@ -133,6 +134,27 @@ class CallStreamingTests {
         val result = caller(client).callStreaming({ get() }) { get -> get().mapValue { it.value } }
 
         assertTrue(result is CallStatus.NetworkFailure, result.toString())
+    }
+
+    @Test
+    fun `a second call inside one streaming call fails - the guard is what makes the handler cast sound`() = runTest {
+        // Not merely the same rule as a plain call. HttpClient.call narrows the star-projected
+        // handler back to <S, Any, F> using its own type parameters, which holds only because one
+        // instance sees one endpoint: two endpoints in one lambda would hand a single handler two
+        // different S/F pairs. The guard is what rules that out, so relaxing it would silently
+        // unsound the cast rather than merely allow a second request.
+        val caller = caller(clientAnswering())
+
+        val ex = assertFailsWith<IllegalStateException> {
+            caller.callStreaming({
+                get()
+                get()
+            }) { get -> get().mapValue { it.value } }
+        }
+        assertTrue(
+            "can only call one service method" in (ex.message ?: ""),
+            "the message should say an instance serves a single call, was: ${ex.message}",
+        )
     }
 
     @Test

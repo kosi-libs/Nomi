@@ -44,6 +44,9 @@ public interface ServiceCaller<T : EndpointService> {
      * [successType] and [failureType] are what the reified extensions capture for it: they are how
      * the returned [Either] tells its two branches apart. [buildRequest], when given, customizes
      * this one call's request.
+     *
+     * [call] invokes exactly one endpoint method: the service instance it runs on serves one request
+     * and refuses a second.
      */
     public suspend fun <S, F : Error> call(
         successType: NType<S>,
@@ -83,10 +86,6 @@ public class NomiServiceCaller<T : EndpointService>(
     private val service: (HttpClient, KtorRequestBuilder?, StreamingResponseHandler<*, *, *>?) -> T
 ) : ServiceCaller<T> {
 
-    // One service instance serves every plain, uncustomized call: with no buildRequest and no
-    // streaming handler there is nothing per-call to carry, so there is nothing to rebuild.
-    private val standardCallService = service(client, null, null)
-
     override suspend fun <S, F : Error> call(
         successType: NType<S>,
         failureType: NType<F>,
@@ -95,12 +94,10 @@ public class NomiServiceCaller<T : EndpointService>(
     ): CallStatus.Result<S, F> {
 
         try {
-            // A per-call customization has to be carried by the service instance itself, because
-            // that is where the generated endpoint methods read it from (NomiClientEndpointService).
-            val service =
-                if (buildRequest != null) {
-                    service(client, buildRequest, null)
-                } else standardCallService
+            // A fresh instance per call: the customization has to be carried by the instance itself,
+            // since that is where the generated endpoint methods read it from, and an instance is
+            // single-use anyway (NomiClientEndpointService tracks whether it has been called).
+            val service = service(client, buildRequest, null)
             // Either is a value class over one `content: Any?` - it carries no runtime type of its
             // own, so which branch it holds is decided by the NTypes the caller captured, not by
             // the static type parameters here.
@@ -181,6 +178,9 @@ public suspend inline fun <T : EndpointService, reified S, reified F : Error> Se
  *
  * The block runs with the service as its receiver, so every resource factory and endpoint method is
  * in scope directly: `caller.call { Articles().get(page = 1) }`.
+ *
+ * It calls exactly one endpoint method. Building resources is free - only the endpoint call itself
+ * counts - but a block invoking two of them fails: call twice instead.
  */
 public suspend inline fun <T : EndpointService, reified S, reified F : Error> ServiceCaller<T>.call(
     noinline call: suspend T.() -> Either<S, F>

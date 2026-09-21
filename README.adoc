@@ -966,6 +966,10 @@ val result = APIServices.articles(client).call {
 The `call { }` block runs with the service as its receiver, so every resource factory and endpoint
 method is in scope directly.
 
+It calls exactly one endpoint method.
+Building resources is free — only the endpoint call itself counts — but a block calling two of them
+fails, so call twice instead.
+
 === Customizing a request
 
 `call` has a second form for the calls that need it, taking the request customization — headers,

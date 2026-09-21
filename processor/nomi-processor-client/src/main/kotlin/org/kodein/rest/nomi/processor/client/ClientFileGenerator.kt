@@ -8,13 +8,11 @@ import com.squareup.kotlinpoet.CodeBlock
 import com.squareup.kotlinpoet.FileSpec
 import com.squareup.kotlinpoet.FunSpec
 import com.squareup.kotlinpoet.KModifier
-import com.squareup.kotlinpoet.LambdaTypeName
 import com.squareup.kotlinpoet.MemberName
 import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
 import com.squareup.kotlinpoet.PropertySpec
 import com.squareup.kotlinpoet.STAR
 import com.squareup.kotlinpoet.TypeSpec
-import com.squareup.kotlinpoet.UNIT
 import com.squareup.kotlinpoet.ksp.toClassName
 import com.squareup.kotlinpoet.ksp.toKModifier
 import com.squareup.kotlinpoet.ksp.toTypeName
@@ -36,22 +34,20 @@ private val INTERNAL_NOMI_API = ClassName("org.kodein.rest.nomi", "InternalNomiA
 private val OPT_IN = ClassName("kotlin", "OptIn")
 private val EITHER = ClassName("org.kodein.rest.nomi", "Either")
 private val HTTP_CLIENT = ClassName("io.ktor.client", "HttpClient")
-private val HTTP_REQUEST_BUILDER = ClassName("io.ktor.client.request", "HttpRequestBuilder")
 private val SERVICE_CALLER = ClassName("org.kodein.rest.nomi.client", "ServiceCaller")
 private val NOMI_SERVICE_CALLER = ClassName("org.kodein.rest.nomi.client", "NomiServiceCaller")
 private val NOMI_CLIENT_ENDPOINT_SERVICE = ClassName("org.kodein.rest.nomi.client", "NomiClientEndpointService")
 private val HTTP_METHOD_COMPANION = ClassName("io.ktor.http", "HttpMethod", "Companion")
-private val CALL_MEMBER = MemberName("org.kodein.rest.nomi.client", "call")
-private val APPEND_PARAMETER_MEMBER = MemberName("org.kodein.rest.nomi.client", "appendParameter")
+// No MemberName for call, appendParameter, setEndpointBinaryBody, appendEndpointFile or
+// appendEndpointItem: they are members of NomiClientEndpointService, which the impl extends, so they
+// are emitted as bare names. Being inherited they need no import, and a MemberName would emit one -
+// or, given an enclosing class, qualify the call, which is not how an inherited member is called.
 private val SET_BODY_MEMBER = MemberName("io.ktor.client.request", "setBody")
 private val MULTIPART = ClassName("org.kodein.rest.nomi", "EndpointService", "Multipart")
 private val MULTI_PART_FORM_DATA_CONTENT = ClassName("io.ktor.client.request.forms", "MultiPartFormDataContent")
 private val FORM_DATA = MemberName("io.ktor.client.request.forms", "formData")
 private val FOR_EACH_PART = MemberName("org.kodein.rest.nomi", "forEachPart")
-private val APPEND_ENDPOINT_FILE = MemberName("org.kodein.rest.nomi.client", "appendEndpointFile")
-private val APPEND_ENDPOINT_ITEM = MemberName("org.kodein.rest.nomi.client", "appendEndpointItem")
 private val ENDPOINT_BINARY = ClassName("org.kodein.rest.nomi", "EndpointBinary")
-private val SET_ENDPOINT_BINARY_BODY = MemberName("org.kodein.rest.nomi.client", "setEndpointBinaryBody")
 // The runtime's own nested typealiases, so the generated impl tracks NomiClientEndpointService
 // rather than restating its shape - both nullable, since a plain `call` supplies neither.
 private val KTOR_REQUEST_BUILDER =
@@ -114,21 +110,13 @@ public class ClientFileGenerator(private val codeGenerator: CodeGenerator) {
             .addModifiers(KModifier.PRIVATE)
             .addAnnotation(AnnotationSpec.builder(OPT_IN).addMember("%T::class", INTERNAL_NOMI_API).build())
             .addSuperinterface(serviceClassName)
-            .addSuperinterface(NOMI_CLIENT_ENDPOINT_SERVICE)
+            // Both are the base class's own properties, so they are passed through rather than
+            // overridden - only `client` becomes a property of the impl itself.
+            .superclass(NOMI_CLIENT_ENDPOINT_SERVICE)
+            .addSuperclassConstructorParameter("buildRequest")
+            .addSuperclassConstructorParameter("streamingHandler")
             .primaryConstructor(constructor)
             .addProperty(PropertySpec.builder("client", HTTP_CLIENT).initializer("client").build())
-            .addProperty(
-                PropertySpec.builder("buildRequest", KTOR_REQUEST_BUILDER)
-                    .addModifiers(KModifier.OVERRIDE)
-                    .initializer("buildRequest")
-                    .build(),
-            )
-            .addProperty(
-                PropertySpec.builder("streamingHandler", STREAMING_RESPONSE_HANDLER)
-                    .addModifiers(KModifier.OVERRIDE)
-                    .initializer("streamingHandler")
-                    .build(),
-            )
             .apply { service.endpoints.forEach { addFunction(buildEndpointFun(it)) } }
             .build()
     }
@@ -170,7 +158,7 @@ public class ClientFileGenerator(private val codeGenerator: CodeGenerator) {
         val paramsByName = endpoint.resource.allParams.associateBy { it.name }
 
         val builder = CodeBlock.builder()
-        builder.add("client.%M(\n", CALL_MEMBER)
+        builder.add("client.call(\n")
         builder.indent()
         builder.add("pathSegments = listOf(\n")
         builder.indent()
@@ -185,7 +173,7 @@ public class ClientFileGenerator(private val codeGenerator: CodeGenerator) {
             when (val payload = endpoint.payload) {
                 null -> Unit
                 is BodyParam -> add(CodeBlock.of("%M(%N)", SET_BODY_MEMBER, payload.name))
-                is BinaryParam -> add(CodeBlock.of("%M(%N)", SET_ENDPOINT_BINARY_BODY, payload.name))
+                is BinaryParam -> add(CodeBlock.of("setEndpointBinaryBody(%N)", payload.name))
                 is MultipartParam -> add(renderMultipartBody(payload))
             }
             endpoint.queries.forEach { add(renderAppendParameter(it)) }
@@ -255,17 +243,17 @@ public class ClientFileGenerator(private val codeGenerator: CodeGenerator) {
     private fun renderPartAppend(part: MultipartPart): CodeBlock {
         val property = part.property.simpleName.asString()
         return when (val payload = part.payload) {
-            is PartPayload.File -> CodeBlock.of("%M(%S, part.%N)", APPEND_ENDPOINT_FILE, part.wireName, property)
+            is PartPayload.File -> CodeBlock.of("appendEndpointFile(%S, part.%N)", part.wireName, property)
             is PartPayload.Value -> CodeBlock.of(
-                "%M(%S, part.%N, %T)",
-                APPEND_ENDPOINT_ITEM, part.wireName, property, payload.stringer.declaration.toClassName(),
+                "appendEndpointItem(%S, part.%N, %T)",
+                part.wireName, property, payload.stringer.declaration.toClassName(),
             )
         }
     }
 
     private fun renderAppendParameter(query: QueryParam): CodeBlock =
         CodeBlock.of(
-            "%M(%S, %N, %T)",
-            APPEND_PARAMETER_MEMBER, query.wireName, query.parameterName, query.stringer.declaration.toClassName(),
+            "appendParameter(%S, %N, %T)",
+            query.wireName, query.parameterName, query.stringer.declaration.toClassName(),
         )
 }

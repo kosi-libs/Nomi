@@ -614,11 +614,19 @@ Two more runtime functions, also under `@InternalNomiAPI`:
 
 For each `@ClientEndpointServiceFactory` annotated object, the client processor generates, in the same package:
 
-* A private implementation of the service interface that also implements `NomiClientEndpointService`.
+* A private implementation of the service interface that extends `NomiClientEndpointService`.
   Its constructor is exactly what ``NomiServiceCaller``'s factory calls: the `HttpClient`, the per-call request
   customization, and the streaming response handler — the last two nullable, since a plain `call` supplies neither.
-  Both are `override val`s, and `HttpClient.call` reads them back off the service; a streaming handler is what makes
-  it keep the response open inside ktor's `execute { }` rather than reading it eagerly.
+  The last two are passed straight to the base class, which owns them; only the client becomes a property of the
+  implementation itself.
+  `HttpClient.call` reads them back off the service, and a streaming handler is what makes it keep the response
+  open inside ktor's `execute { }` rather than reading it eagerly.
++
+`call`, `appendParameter`, `setEndpointBinaryBody`, `appendEndpointFile` and `appendEndpointItem` are *members* of
+`NomiClientEndpointService`, so the generated code calls them unqualified and imports none of them: being
+inherited, they are in scope throughout the implementation's own endpoint methods.
+The generator therefore emits them as bare names rather than as KotlinPoet ``MemberName``s, which would emit an
+import for a function that is not top-level.
 * A public extension function on the annotated object, named after the annotation's `name` argument,
   that creates a `ServiceCaller` for the service interface.
 
@@ -627,9 +635,9 @@ For each `@ClientEndpointServiceFactory` annotated object, the client processor 
 @OptIn(InternalNomiAPI::class)
 private class NomiAPIServicesUsersServiceClient(
     val client: HttpClient,
-    override val buildRequest: ServiceCaller.KtorRequestBuilder?,
-    override val streamingHandler: ServiceCaller.StreamingResponseHandler<*, *, *>?,
-) : UsersService, NomiClientEndpointService {
+    buildRequest: ServiceCaller.KtorRequestBuilder?,
+    streamingHandler: ServiceCaller.StreamingResponseHandler<*, *, *>?,
+) : NomiClientEndpointService(buildRequest, streamingHandler), UsersService {
     override suspend fun Users.get(page: Int?): Either<List<UserSummary>, NoFail> =
         client.call(
             pathSegments = listOf(
@@ -742,7 +750,7 @@ An endpoint taking an `EndpointBinary` emits `setEndpointBinaryBody(data)` in pl
 `ChannelWriterContent` carrying the binary's content type and, when known, its size, and streams the source into the
 request rather than buffering it.
 
-`appendEndpointFile` and `appendEndpointItem` are runtime functions under `@InternalNomiAPI`, and `ListMultipart` is
+`appendEndpointFile` and `appendEndpointItem` are ``NomiClientEndpointService`` members under `@InternalNomiAPI`, and `ListMultipart` is
 the runtime's `Multipart<T>` over a plain list. A `Multipart<T>` is a single-pass stream in both directions: the
 generated client drains the caller's one while building the body, and consuming one twice fails rather than quietly
 sending nothing.
@@ -818,6 +826,17 @@ sending nothing.
 * *``asEndpointFile`` must not be imported; `asEndpointValue` must.* The first is a member extension of `PartScope`,
   the transform's receiver, and resolves inside the transform lambda with no import at all — emitting one is an
   unresolved reference. The second is top-level and needs its import like any other runtime function.
+* *The client's request helpers must not be imported either, for the same reason.* `call`,
+  `appendParameter`, `setEndpointBinaryBody`, `appendEndpointFile` and `appendEndpointItem` are members of
+  `NomiClientEndpointService`, which the generated implementation extends, so they resolve through its dispatch
+  receiver with no import. `forEachPart` is top-level and still needs one. A KotlinPoet `MemberName` is the wrong
+  tool for the first group twice over: with a package it emits an unresolvable import, and with an enclosing
+  `ClassName` it qualifies the call, which is not how an inherited member is called.
+* *A generated implementation is single-use.* `NomiClientEndpointService` refuses a second call, so one
+  `call { }` or `callStreaming { }` lambda invokes exactly one endpoint method — building resources is free, only
+  the endpoint call counts. `NomiServiceCaller` therefore constructs a fresh implementation per call rather than
+  sharing one. That guard is also what makes ``HttpClient.call``'s narrowing of the streaming handler sound: one
+  instance sees one endpoint, so one handler is only ever given the `S`/`F` pair it was installed for.
 * *A part contributes `Content-Disposition` _parameters_ only.* ktor's `formData` writes
   `Content-Disposition: form-data; name="<key>"` itself and appends anything a part adds as a further value of the
   same header, which `MultiPartFormDataContent` then joins with `"; "`. A part that contributes a disposition of its

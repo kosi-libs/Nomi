@@ -22,6 +22,7 @@ import org.kodein.rest.nomi.NType
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertTrue
 
 private data class CallerTestFail(val reason: String) : Error
 
@@ -36,6 +37,18 @@ private class FakeEndpointService(
 
 private fun dummyClient(): HttpClient = HttpClient(MockEngine { error("the engine should not be reached by this test") })
 
+/** Answers every request with a [Payload], for the tests that run a real call through the caller. */
+private fun payloadClient(): HttpClient = HttpClient(MockEngine { _ ->
+    respond(
+        content = """{"value":42}""",
+        status = HttpStatusCode.OK,
+        headers = headersOf(HttpHeaders.ContentType, "application/json"),
+    )
+}) {
+    install(ContentNegotiation) { json() }
+    defaultRequest { url("https://example.test/") }
+}
+
 @Serializable
 private data class Payload(val value: Int)
 
@@ -45,9 +58,9 @@ private data class EndToEndFail(val reason: String) : Error
 @OptIn(InternalNomiAPI::class)
 private class EndToEndService(
     private val client: HttpClient,
-    override val buildRequest: ServiceCaller.KtorRequestBuilder?,
-    override val streamingHandler: ServiceCaller.StreamingResponseHandler<*, *, *>?,
-) : NomiClientEndpointService {
+    buildRequest: ServiceCaller.KtorRequestBuilder?,
+    streamingHandler: ServiceCaller.StreamingResponseHandler<*, *, *>?,
+) : NomiClientEndpointService(buildRequest, streamingHandler) {
     suspend fun get(): Either<Payload, EndToEndFail> = client.call(listOf("thing"), HttpMethod.Get)
 }
 
@@ -122,18 +135,39 @@ class NomiServiceCallerTests {
 
     @Test
     fun `an end-to-end call over MockEngine mirrors the generated client shape`() = runTest {
-        val client = HttpClient(MockEngine { _ ->
-            respond(
-                content = """{"value":42}""",
-                status = HttpStatusCode.OK,
-                headers = headersOf(HttpHeaders.ContentType, "application/json"),
-            )
-        }) {
-            install(ContentNegotiation) { json() }
-            defaultRequest { url("https://example.test/") }
-        }
-        val caller: ServiceCaller<EndToEndService> = NomiServiceCaller(client, service = ::EndToEndService)
+        val caller: ServiceCaller<EndToEndService> = NomiServiceCaller(payloadClient(), service = ::EndToEndService)
         val result = caller.call { get() }
         assertEquals(CallStatus.Success(Payload(42)), result)
+    }
+
+    @Test
+    fun `a call lambda invoking two endpoints fails instead of silently reusing one instance`() = runTest {
+        // README § Calling: a call block invokes exactly one endpoint method. The service instance it
+        // runs on serves one request, so the second call throws rather than quietly sharing the first
+        // call's instance - and it propagates, like any other programmer error, instead of folding
+        // into a CallStatus.
+        val caller: ServiceCaller<EndToEndService> = NomiServiceCaller(payloadClient(), service = ::EndToEndService)
+
+        val ex = assertFailsWith<IllegalStateException> {
+            caller.call {
+                get()
+                get()
+            }
+        }
+        assertTrue(
+            "can only call one service method" in (ex.message ?: ""),
+            "the message should say an instance serves a single call, was: ${ex.message}",
+        )
+    }
+
+    @Test
+    fun `one ServiceCaller serves repeated calls - each on a fresh service instance`() = runTest {
+        // The companion invariant of that guard: instances being single-use, the caller has to build
+        // one per call. Sharing one - which is what this class did before the guard existed - would
+        // make every call after the first trip it.
+        val caller: ServiceCaller<EndToEndService> = NomiServiceCaller(payloadClient(), service = ::EndToEndService)
+
+        assertEquals(CallStatus.Success(Payload(42)), caller.call { get() })
+        assertEquals(CallStatus.Success(Payload(42)), caller.call { get() })
     }
 }

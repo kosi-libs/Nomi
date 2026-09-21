@@ -142,16 +142,20 @@ class ClientGenerationTests {
         )
         assertEquals(KotlinCompilation.ExitCode.OK, result.exitCode, result.errors().joinToString("\n"))
         val generated = result.generated("NomiFactoriesDerivedClient.kt")
-        assertTrue(generated.contains(": Derived,"), generated)
+        // The impl implements the *registered* service, never the parent it inherits the endpoint
+        // from. NomiClientEndpointService, being a superclass, heads the supertype list, so the
+        // service interface is the line under it.
+        assertTrue(generated.contains("\n    Derived {"), generated)
+        assertFalse(generated.contains("Base"), generated)
         assertTrue(generated.contains("override suspend fun Res.`get`"), generated)
     }
 
     @Test
     fun `the generated impl carries everything NomiClientEndpointService declares`() {
         // The ServiceCaller hands its factory a per-call request customization and a streaming
-        // handler; the impl must take and override both, or `::Impl` stops conforming to the
-        // factory type. Asserted here rather than only in the golden, so a change to
-        // NomiClientEndpointService fails with a message that names what is missing.
+        // handler; the impl must take both and pass both to the base class, or `::Impl` stops
+        // conforming to the factory type. Asserted here rather than only in the golden, so a change
+        // to NomiClientEndpointService fails with a message that names what is missing.
         val result = compile(
             SourceFile.kotlin(
                 "endpoints.kt",
@@ -178,10 +182,14 @@ class ClientGenerationTests {
         )
         assertEquals(KotlinCompilation.ExitCode.OK, result.exitCode, result.errors().joinToString("\n"))
         val generated = result.generated("NomiFactoriesSvcClient.kt")
-        assertTrue(generated.contains("override val buildRequest: ServiceCaller.KtorRequestBuilder?"), generated)
+        assertTrue(generated.contains("buildRequest: ServiceCaller.KtorRequestBuilder?"), generated)
+        assertTrue(generated.contains("streamingHandler: ServiceCaller.StreamingResponseHandler<*, *, *>?"), generated)
         assertTrue(
-            generated.contains("override val streamingHandler: ServiceCaller.StreamingResponseHandler<*, *, *>?"),
+            generated.contains("NomiClientEndpointService(buildRequest, streamingHandler)"),
             generated,
         )
+        // The helpers are inherited members now, so the impl must call them bare - an import would
+        // mean the generator still thinks they are top-level, and would not compile.
+        assertFalse(generated.contains("import org.kodein.rest.nomi.client.call"), generated)
     }
 }

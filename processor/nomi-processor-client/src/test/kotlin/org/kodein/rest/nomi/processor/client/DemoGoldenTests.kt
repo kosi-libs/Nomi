@@ -119,8 +119,6 @@ class DemoGoldenTests {
             import org.kodein.rest.nomi.client.NomiClientEndpointService
             import org.kodein.rest.nomi.client.NomiServiceCaller
             import org.kodein.rest.nomi.client.ServiceCaller
-            import org.kodein.rest.nomi.client.appendParameter
-            import org.kodein.rest.nomi.client.call
             import org.kodein.rest.nomi.demo.shared.Article
             import org.kodein.rest.nomi.demo.shared.ArticleCommentFailure
             import org.kodein.rest.nomi.demo.shared.ArticleCreationFailure
@@ -131,10 +129,10 @@ class DemoGoldenTests {
             @OptIn(InternalNomiAPI::class)
             private class NomiAPIServicesArticlesServiceClient(
               public val client: HttpClient,
-              override val buildRequest: ServiceCaller.KtorRequestBuilder?,
-              override val streamingHandler: ServiceCaller.StreamingResponseHandler<*, *, *>?,
-            ) : ArticlesService,
-                NomiClientEndpointService {
+              buildRequest: ServiceCaller.KtorRequestBuilder?,
+              streamingHandler: ServiceCaller.StreamingResponseHandler<*, *, *>?,
+            ) : NomiClientEndpointService(buildRequest, streamingHandler),
+                ArticlesService {
               override suspend fun Articles.`get`(page: Int?): Either<List<String>?, NoFail> = client.call(
                 pathSegments = listOf(
                   "articles",

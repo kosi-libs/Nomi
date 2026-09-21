@@ -40,17 +40,19 @@ private data class TestValue(val name: String, val count: Int)
 @Serializable
 private data class CallTestFail(val reason: String) : Error
 
-// Mirrors how generated client code calls the runtime: a class implementing
+// Mirrors how generated client code calls the runtime: a class extending
 // NomiClientEndpointService, with plain (non-generic) suspend member functions calling
 // client.call(...) directly - exactly as NomiAPIServicesArticlesServiceClient does in the demo.
-// One method per S/F shape needed below, rather than a single generic helper: the `call` context
-// parameter resolves through a member's own dispatch receiver only for a plain suspend function,
-// not once that function is itself made `inline`/`reified` to forward S and F generically.
+// `call` is inherited, so it needs no import and no receiver threaded through; it resolves on the
+// subclass's own dispatch receiver. One method per S/F shape below rather than a single generic
+// helper, because that resolution holds only for a plain suspend function, not once the function is
+// itself made `inline`/`reified` to forward S and F generically.
+// Each test builds a fresh instance: an instance serves one call and refuses a second.
 @OptIn(InternalNomiAPI::class)
 private class FakeService(
-    override val buildRequest: ServiceCaller.KtorRequestBuilder? = null,
-    override val streamingHandler: ServiceCaller.StreamingResponseHandler<*, *, *>? = null,
-) : NomiClientEndpointService {
+    buildRequest: ServiceCaller.KtorRequestBuilder? = null,
+    streamingHandler: ServiceCaller.StreamingResponseHandler<*, *, *>? = null,
+) : NomiClientEndpointService(buildRequest, streamingHandler) {
     suspend fun getValue(
         client: HttpClient,
         pathSegments: List<String>,
@@ -185,6 +187,27 @@ class HttpClientCallTests {
         assertEquals(listOf("a b", "c"), url.segments)
         assertTrue(url.encodedPath.contains("a%20b"))
         assertEquals(HttpMethod.Post, capturedMethod)
+    }
+
+    @Test
+    fun `a second call on one service instance fails instead of sending a second request`() = runTest {
+        // An instance serves one endpoint call. The guard sits before prepareRequest, so the second
+        // call must not reach the engine at all - and it surfaces as an IllegalStateException, a
+        // programmer error, rather than folding into a CallStatus the caller might ignore.
+        var requests = 0
+        val client = mockClient { _ ->
+            requests++
+            respond(content = "", status = HttpStatusCode.NoContent)
+        }
+        val fake = FakeService()
+        fake.getUnit(client, listOf("path"))
+
+        val ex = assertFailsWith<IllegalStateException> { fake.getUnit(client, listOf("path")) }
+        assertTrue(
+            "can only call one service method" in (ex.message ?: ""),
+            "the message should say an instance serves a single call, was: ${ex.message}",
+        )
+        assertEquals(1, requests, "the refused call must not have reached the engine")
     }
 
     @Test

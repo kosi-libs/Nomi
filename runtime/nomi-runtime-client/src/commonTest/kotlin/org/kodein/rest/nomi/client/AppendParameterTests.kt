@@ -9,10 +9,10 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 @OptIn(InternalNomiAPI::class)
-private class AppendParamFakeService : NomiClientEndpointService {
-    override val buildRequest: ServiceCaller.KtorRequestBuilder? = null
-    override val streamingHandler: ServiceCaller.StreamingResponseHandler<*, *, *>? = null
-}
+// The helpers under test are members of NomiClientEndpointService, so they need a dispatch
+// receiver: hence the `with(fake)` in every test below. This fake carries no per-call state of
+// its own - neither a request customization nor a streaming handler is involved in encoding.
+private class AppendParamFakeService : NomiClientEndpointService(buildRequest = null, streamingHandler = null)
 
 private object ReservedCharStringer : Stringer<String> {
     override fun encode(value: String): String = value
