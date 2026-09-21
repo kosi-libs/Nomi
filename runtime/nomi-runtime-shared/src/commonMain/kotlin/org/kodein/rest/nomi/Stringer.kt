@@ -23,6 +23,14 @@ public interface Stringer<T> {
     /** Reads [encoded] back into a [T], or fails with the reason the server answers `400` with. */
     public fun decode(encoded: String): Either<T, Failure>
 
+    /**
+     * The media type [encode]'s output is, used as a multipart part's `Content-Type` header.
+     *
+     * It has no bearing on a path or query parameter, which is always plain text in a URL. A
+     * `Stringer` producing JSON, say, overrides it so the part it encodes announces itself
+     * correctly; the server accepts a part whose declared type matches this one, ignoring
+     * parameters such as `charset` (README.adoc § Stringers).
+     */
     public val contentType: ContentType get() = ContentType.Text.Plain
 
     /**

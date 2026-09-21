@@ -346,7 +346,9 @@ the function can then be named anything, as `create` is above.
 === The request body
 
 The first parameter, when it carries no `@Endpoint.Query` — `content` in `Articles.New.create`
-above. Only `post`, `put` and `patch` endpoints may declare one.
+above. Only `post`, `put` and `patch` endpoints may declare one. A `Multipart<T>` parameter in that
+position is a `multipart/form-data` body instead (see <<multipart-form-data,Multipart form data>>);
+an endpoint has one or the other, never both.
 
 === Query parameters
 
@@ -447,20 +449,22 @@ impossible `NoFail` case to `it.isImpossible(): Nothing`.
 [#stringers]
 == Stringers
 
-Every path parameter and query parameter is a `String` on the wire. A `Stringer<T>` is the two-way
-conversion:
+Every path parameter and query parameter — and every non-file multipart part — is a `String` on
+the wire. A `Stringer<T>` is the two-way conversion:
 
 [source,kotlin]
 ----
 public interface Stringer<T> {
     public fun encode(value: T): String
     public fun decode(encoded: String): Either<T, Stringer.Failure>
+    public val contentType: ContentType get() = ContentType.Text.Plain
 }
 ----
 
 Escaping is not a ``Stringer``'s job — the runtime percent-encodes every path segment and query value
 on its way out, and decodes it on the way back in, so `encode`/`decode` always work in *unescaped*
-text.
+text. A multipart part is not percent-encoded at all: it carries its ``Stringer``'s `contentType` as
+its own `Content-Type` header, which is the only place that property is used.
 
 === Built-ins
 
@@ -557,13 +561,157 @@ carries every `Stringer` a project shares between its resources and services.
 
 The nearest declaration wins:
 
-. `@Endpoint.Stringed` on the property or query parameter itself.
+. `@Endpoint.Stringed` on the property, query parameter or multipart part payload itself.
 . Otherwise, the declaring interface and each interface outward — nearest first — checked for an
   `@Endpoint.UseStringer` reachable from its own annotation tree.
 . Otherwise, the built-in `Stringer` for `Boolean`, `Int`, `Long` or `String`.
 
 Interface distance always dominates annotation depth: a registration on a nearer interface wins
 over one on a farther interface, however many carrier annotations either is reached through.
+
+[#multipart-form-data]
+== Multipart form data
+
+An endpoint can take a `multipart/form-data` body instead of a negotiated one — a file upload,
+typically, or a file alongside the metadata describing it. Where an ordinary body is one value,
+a multipart body is a sequence of named _parts_, and Nomi asks you to declare what those parts are.
+
+=== Declaring the parts
+
+A _part type_ is a `sealed interface` annotated `@Endpoint.MultipartFormData`, with one nested
+`data class` per part. Each part holds exactly one property: its payload.
+
+.ToolsPostData.kt
+[source,kotlin]
+----
+@Endpoint.MultipartFormData
+sealed interface ToolsPostData {
+
+    data class File(val file: EndpointFile) : ToolsPostData
+
+    @Endpoint.MultipartFormData.Part(presence = PartPresence.Optional)
+    data class From(val from: Uuid) : ToolsPostData
+
+    @Endpoint.MultipartFormData.Part(name = "article", presence = PartPresence.RepeatedRequired)
+    data class With(
+        @Endpoint.Stringed(ArticleContentJsonStringer::class)
+        val content: ArticleContent,
+    ) : ToolsPostData
+}
+----
+
+A payload typed `EndpointFile` makes a _file part_; any other type makes a _value part_, and needs
+a `Stringer` exactly as a query parameter does (see <<stringers,Stringers>>) — resolved from the
+part type outward, so `@Endpoint.UseStringer` on the part type itself is the nearest scope.
+
+A part's name on the wire is the subclass's own name with a lowercase first letter — `file`,
+`from` — or ``@Endpoint.MultipartFormData.Part``'s `name` argument when you give one, as `With`
+does to arrive as `article`.
+
+Its `presence` argument fixes how many times the part may occur, and drives both ends:
+
+[cols="1,1,1,2",options="header"]
+|===
+| `PartPresence` | Occurrences | Sending | Receiving
+
+| `Required` _(default)_
+| Exactly one
+| `p: T`
+| `400` when absent, and on a second one
+
+| `Optional`
+| Zero or one
+| `p: T? = null`
+| `400` on a second one
+
+| `RepeatedRequired`
+| One or more
+| `p: List<T>`
+| `400` when absent
+
+| `RepeatedOptional`
+| Zero or more
+| `p: List<T> = emptyList()`
+| never rejected on count
+|===
+
+=== The endpoint
+
+A multipart endpoint takes one `Multipart<T>` parameter where an ordinary body would go — first,
+unannotated, on a `post`, `put` or `patch`. It replaces the body rather than joining it: an
+endpoint has one or the other, never both.
+
+.MPService.kt
+[source,kotlin]
+----
+@Endpoint.Service
+interface MPService : EndpointService {
+    suspend fun Tools.post(parts: Multipart<ToolsPostData>): Either<Unit, NoFail>
+}
+----
+
+=== Sending one
+
+The client processor generates a builder on your `@ClientEndpointServiceFactory` object, named
+`multipart` followed by the part type's name, with one parameter per part shaped by its presence:
+
+.main.kt
+[source,kotlin]
+----
+APIServices.mp(client).call {
+    Tools().post(
+        APIServices.multipartToolsPostData(
+            file = EndpointFile(fileName = "foo.txt", fileSize = 8, source = { source }),
+            from = Uuid.random(),
+            with = listOf(ArticleContent("Yay", "Salomon", "This is cool!")),
+        )
+    )
+}
+----
+
+One builder is generated per object, however many of its services use that part type; two different
+factory objects each get their own.
+
+=== Receiving one
+
+`forEachPart` is how a server reads them, and the `when` over the sealed part type is exhaustive —
+add a part later and every handler stops compiling until it is dealt with:
+
+.ServerMPService.kt
+[source,kotlin]
+----
+override suspend fun Tools.post(parts: Multipart<ToolsPostData>): Either<Unit, NoFail> {
+    var file: String? = null
+    var from: Uuid? = null
+    val articles = mutableListOf<ArticleContent>()
+
+    parts.forEachPart { part ->
+        when (part) {
+            // Read now: the file is only valid inside this handler.
+            is ToolsPostData.File -> file = part.file.source().use { it.readString() }
+            is ToolsPostData.From -> from = part.from
+            is ToolsPostData.With -> articles += part.content
+        }
+    }
+
+    return Either.unit()
+}
+----
+
+A part the peer sends that the part type never declared is a `400`, as is one that breaks its
+declared `presence`.
+
+=== Part lifetime
+
+A multipart body is a single-pass stream, and each part is released as soon as its handler returns.
+
+NOTE: An ``EndpointFile``'s content is only valid *inside* the handler that received it. Read what
+you need while you are still in the loop — copying the bytes out, or streaming them straight to
+their destination. Keeping the `EndpointFile` and reading it after `forEachPart` has moved on
+throws `IllegalStateException`, because the buffer it would read from is gone.
+
+The same one-pass rule holds on the client: a `Multipart<T>` you build is consumed as the request
+body is written, so build a fresh one per call rather than reusing one.
 
 == Wire protocol
 
@@ -585,16 +733,24 @@ over one on a farther interface, however many carrier annotations either is reac
 
 | `400 Bad Request`
 | A path or query parameter's `Stringer` failed to decode it, or a required query parameter was
-  missing. The body is the `Stringer.Failure` reason.
+  missing. The body is the `Stringer.Failure` reason. A multipart body adds its own causes: a
+  missing required part, a second occurrence of a part that may not repeat, a part the endpoint
+  never declared, a part of the wrong kind, and a part whose `Content-Type` contradicts its
+  ``Stringer``'s.
 
 | _(anything else)_
 | Whatever `httpError(code, message)` raised, with `message` as the body when one was given.
 |===
 
-Serialization itself is entirely yours to configure — Nomi never reads or writes a body. Register
-ktor's `ContentNegotiation` with the same format on both the server and the client
+Serialization itself is entirely yours to configure — Nomi never reads or writes a negotiated body.
+Register ktor's `ContentNegotiation` with the same format on both the server and the client
 (`json(SharedJson)` throughout this README, because the demo uses JSON; CBOR or anything else ktor
 supports works identically).
+
+A `multipart/form-data` body is the one exception, and only partly: Nomi writes and reads the
+multipart envelope itself — the part names, the file names, the boundaries — because those are what
+it declared. Each part's *content* is still yours, through its `Stringer` (see
+<<multipart-form-data,Multipart form data>>).
 
 == The server
 
@@ -954,8 +1110,9 @@ supported target.
 
 == Visibility
 
-Every declaration Nomi reads — resource, service, `Stringer` object, `@ServerEndpointService`
-class, `@ClientEndpointServiceFactory` object — may be `public` or `internal`. Whichever it is, the
+Every declaration Nomi reads — resource, service, `Stringer` object, `@Endpoint.MultipartFormData`
+part type, `@ServerEndpointService` class, `@ClientEndpointServiceFactory` object — may be `public`
+or `internal`. Whichever it is, the
 code the processors generate from it carries the same visibility: an `internal` service gets an
 `internal Route` extension, named after its `routeName`, an `internal` resource gets an `internal`
 factory, and so on.
@@ -969,7 +1126,8 @@ factory, and so on.
 | Module | Contents
 
 | `demo-shared`
-| `Articles`/`Article` resources, `ArticlesService`, `UuidStringer`, and the DTOs.
+| `Articles`/`Article` resources, `ArticlesService`, `MPService` with its `ToolsPostData` part type,
+  `UuidStringer`, and the DTOs.
 
 | `demo-server`
 | `ServerArticlesService`, an in-memory article store, and `main()` starting a ktor server on
@@ -989,7 +1147,8 @@ from the IDE like any other Kotlin entry point.
 | Module | Contents
 
 | `runtime/nomi-runtime-shared`
-| `Either`, `Error`/`NoFail`, `Stringer`, `@Endpoint.*` annotations. Multiplatform, `explicitApi()`.
+| `Either`, `Error`/`NoFail`, `Stringer`, `EndpointFile`, `Multipart`, `@Endpoint.*` annotations.
+  Multiplatform, `explicitApi()`.
 
 | `runtime/nomi-runtime-client`
 | `ServiceCaller`, `CallStatus`, `@ClientEndpointServiceFactory`. Multiplatform, `explicitApi()`.

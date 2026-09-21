@@ -97,6 +97,14 @@ public fun <T> HttpRequestBuilder.appendParameter(
     if (value != null) url.parameters.append(name, stringer.encode(value))
 }
 
+/**
+ * An outgoing [EndpointService.Multipart] over a plain list of parts, which is what a generated
+ * multipart builder returns.
+ *
+ * Single-pass in both directions: consuming one twice fails loudly rather than quietly sending an
+ * empty body, so a builder's result is good for one call. Nothing here is released - the
+ * ``EndpointFile``s in an outgoing part belong to the caller, unlike a part the server received.
+ */
 @InternalNomiAPI
 public class ListMultipart<T : Any>(private val parts: List<T>) : EndpointService.Multipart<T> {
 
@@ -118,6 +126,14 @@ public class ListMultipart<T : Any>(private val parts: List<T>) : EndpointServic
     }
 }
 
+/**
+ * Appends [file] as a file part named [key], carrying its file name, its size when known, and its
+ * content type.
+ *
+ * It contributes `Content-Disposition` *parameters* only: ktor's `formData` writes the
+ * `form-data; name="<key>"` itself and joins whatever a part adds onto it, so a disposition of our
+ * own would land a second one in the middle of the header (SPECS.adoc § Gotchas).
+ */
 @InternalNomiAPI
 context(_: NomiClientEndpointService)
 public fun FormBuilder.appendEndpointFile(
@@ -143,6 +159,13 @@ public fun FormBuilder.appendEndpointFile(
     )
 }
 
+/**
+ * Appends [value] as a value part named [key], encoded by [stringer] and announced with that
+ * ``Stringer``'s [Stringer.contentType].
+ *
+ * Unlike [appendEndpointFile] it adds no `Content-Disposition` parameters at all: the
+ * `form-data; name="<key>"` ktor writes is the whole of what a form field needs.
+ */
 @InternalNomiAPI
 context(_: NomiClientEndpointService)
 public fun <T> FormBuilder.appendEndpointItem(

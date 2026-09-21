@@ -112,6 +112,14 @@ public class PartScope(
 ) {
     private val files = mutableListOf<EndpointFile>()
 
+    /**
+     * Decodes a file part into an [EndpointFile], and raises `400 Bad Request` when the part is
+     * not a file or carries no file name.
+     *
+     * The returned file belongs to this scope, and so to the part: [closeFiles] ends its lifetime
+     * when the part is released, which is what makes reading it outside its `forEachPart` handler
+     * throw rather than read a buffer the server has handed back.
+     */
     public fun PartData.asEndpointFile(name: String): EndpointFile {
         this as? PartData.FileItem ?: context(service) { httpError(HttpStatusCode.BadRequest, "Expected part '$name' to be File, but was ${this::class.simpleName}") }
         return EndpointFile(

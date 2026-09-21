@@ -105,18 +105,54 @@ public annotation class Endpoint(val method: Method) {
     @Target(AnnotationTarget.PROPERTY, AnnotationTarget.VALUE_PARAMETER)
     public annotation class Stringed(val with: KClass<out Stringer<*>>)
 
+    /**
+     * Marks a `sealed interface` as a part type: the closed set of parts a `multipart/form-data`
+     * body may carry, one per nested subtype.
+     *
+     * Each part is a `data class` nested inside the part type, declaring exactly one `val` - its
+     * payload. An [EndpointFile] payload makes a file part; any other type makes a value part, and
+     * needs a [Stringer] resolved as a query parameter's is, starting at the part type itself
+     * (SPECS.adoc § Multipart part types). A part type is named by an endpoint's
+     * [EndpointService.Multipart] parameter, and nowhere else.
+     */
     @Retention(AnnotationRetention.BINARY)
     @Target(AnnotationTarget.CLASS)
     public annotation class MultipartFormData {
+
+        /**
+         * Overrides one part's name on the wire, and how many times it may occur.
+         *
+         * [name] replaces the default, which is the subtype's own simple name with a lowercase
+         * first letter; it must match the same pattern a query parameter name must. [presence]
+         * fixes the part's cardinality, shaping the generated builder's parameter and what the
+         * server enforces - see [PartPresence].
+         *
+         * The annotation is optional: an unannotated part takes a derived name and
+         * [PartPresence.Required].
+         */
         @Retention(AnnotationRetention.BINARY)
         @Target(AnnotationTarget.CLASS)
         public annotation class Part(val name: String = "", val presence: PartPresence = PartPresence.Required)
 
+        /**
+         * How many times a part may occur in one body.
+         *
+         * It drives both ends: the generated client builder takes a single value, a nullable one,
+         * or a `List`; the server answers `400 Bad Request` for a body that breaks the count
+         * (README.adoc § Multipart form data).
+         */
         public enum class PartPresence {
-            Optional, // Zero or one
-            Required, // Exactly one
-            RepeatedOptional, // Zero, one, or more
-            RepeatedRequired; // One or more
+            /** Zero or one. The builder takes `T? = null`; a second occurrence is a `400`. */
+            Optional,
+
+            /** Exactly one. The builder takes `T`; absent, or a second occurrence, is a `400`. */
+            Required,
+
+            /** Zero, one, or more. The builder takes `List<T> = emptyList()`; never a count error. */
+            RepeatedOptional,
+
+            /** One or more. The builder takes `List<T>`; absent is a `400`. */
+            RepeatedRequired;
 
             /** Whether the part must occur at least once: the server answers `400` if it never does. */
             public val isRequired: Boolean get() = this == Required || this == RepeatedRequired
@@ -180,6 +216,31 @@ public interface EndpointService {
 
 }
 
+/**
+ * Runs [handler] over every part, in the order the peer sent them. This is the supported way to
+ * consume a [EndpointService.Multipart] - it owns the loop, so that reaching the end of the stream
+ * and leaving it early are both accounted for.
+ *
+ * Whichever way the loop ends, the stream is accounted for: read it through and the parts the
+ * endpoint requires are checked, answering `400 Bad Request` for a missing one; leave early -
+ * `return`, `break`, or a throw - and what is left is released instead, with no missing-part
+ * check, since leaving early is a decision the endpoint made rather than a malformed request.
+ *
+ * Because it is `inline`, [handler] may suspend, and may `return` from the enclosing endpoint:
+ *
+ * ```kotlin
+ * parts.forEachPart { part ->
+ *     when (part) {
+ *         is Upload.File -> if (part.file.fileSize > MAX) return error(TooLarge)
+ *         is Upload.From -> from = part.from
+ *     }
+ * }
+ * ```
+ *
+ * **A part is released as soon as its handler returns.** Its content - an [EndpointFile] above all
+ * - is only valid inside [handler]; reading one afterwards throws. Copy out whatever must outlive
+ * the loop while you are still in it (README.adoc § Part lifetime).
+ */
 @OptIn(InternalNomiAPI::class)
 public suspend inline fun <T : Any> EndpointService.Multipart<T>.forEachPart(handler: (T) -> Unit) {
     var readToEnd = false
