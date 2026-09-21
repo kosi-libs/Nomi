@@ -466,4 +466,112 @@ class EndpointParameterTests {
         assertTrue(errors.none { it.contains("no Stringer resolves") }, errors.toString())
         assertTrue(errors.none { it.contains("ResGood") }, errors.toString())
     }
+
+    // --- Multipart body (SPECS.adoc § Endpoint parameters) ---
+
+    private fun multipartEndpoint(signature: String, method: String = "@Endpoint(Endpoint.Method.Post)") = compile(
+        SourceFile.kotlin(
+            "parts.kt",
+            """
+            package test
+            import org.kodein.rest.nomi.Endpoint
+            import org.kodein.rest.nomi.EndpointFile
+            import org.kodein.rest.nomi.EndpointService
+            import org.kodein.rest.nomi.Either
+            import org.kodein.rest.nomi.NoFail
+            import org.kodein.rest.nomi.server.ServerEndpointService
+
+            @Endpoint.Resource
+            interface Up
+
+            @Endpoint.MultipartFormData
+            sealed interface Upload {
+                data class File(val `file`: EndpointFile) : Upload
+            }
+
+            @Endpoint.Service
+            interface Svc : EndpointService {
+                $method
+                suspend fun Up.act($signature): Either<Unit, NoFail>
+            }
+
+            @ServerEndpointService("svc")
+            class ServerImpl : Svc {
+                override suspend fun Up.act($signature): Either<Unit, NoFail> = TODO()
+            }
+            """,
+        ),
+    )
+
+    @Test
+    fun `rejects a multipart parameter on a Get endpoint`() {
+        val result = multipartEndpoint("parts: EndpointService.Multipart<Upload>", method = "@Endpoint(Endpoint.Method.Get)")
+        assertEquals(KotlinCompilation.ExitCode.COMPILATION_ERROR, result.exitCode)
+        assertTrue(result.errors().any { it.contains("only allowed on Post, Put or Patch") }, result.errors().toString())
+    }
+
+    @Test
+    fun `rejects a nullable multipart parameter`() {
+        val result = multipartEndpoint("parts: EndpointService.Multipart<Upload>?")
+        assertEquals(KotlinCompilation.ExitCode.COMPILATION_ERROR, result.exitCode)
+        assertTrue(result.errors().any { it.contains("must not be nullable") }, result.errors().toString())
+    }
+
+    @Test
+    fun `rejects a multipart parameter with a default value`() {
+        val result = multipartEndpoint("parts: EndpointService.Multipart<Upload> = TODO()")
+        assertEquals(KotlinCompilation.ExitCode.COMPILATION_ERROR, result.exitCode)
+        assertTrue(result.errors().any { it.contains("must not have a default value") }, result.errors().toString())
+    }
+
+    @Test
+    fun `rejects a multipart parameter carrying Endpoint Stringed`() {
+        val result = multipartEndpoint(
+            "@Endpoint.Stringed(org.kodein.rest.nomi.Stringer.Builtins.StringStringer::class) parts: EndpointService.Multipart<Upload>",
+        )
+        assertEquals(KotlinCompilation.ExitCode.COMPILATION_ERROR, result.exitCode)
+        assertTrue(result.errors().any { it.contains("@Endpoint.Stringed") }, result.errors().toString())
+    }
+
+    @Test
+    fun `rejects a star-projected multipart parameter`() {
+        val result = multipartEndpoint("parts: EndpointService.Multipart<*>")
+        assertEquals(KotlinCompilation.ExitCode.COMPILATION_ERROR, result.exitCode)
+        assertTrue(result.errors().any { it.contains("must name its part type") }, result.errors().toString())
+    }
+
+    @Test
+    fun `rejects a multipart over a type that is not a part type`() {
+        val result = compile(
+            SourceFile.kotlin(
+                "parts.kt",
+                """
+                package test
+                import org.kodein.rest.nomi.Endpoint
+                import org.kodein.rest.nomi.EndpointService
+                import org.kodein.rest.nomi.Either
+                import org.kodein.rest.nomi.NoFail
+                import org.kodein.rest.nomi.server.ServerEndpointService
+
+                @Endpoint.Resource
+                interface Up
+
+                sealed interface NotAPartType
+
+                @Endpoint.Service
+                interface Svc : EndpointService {
+                    @Endpoint(Endpoint.Method.Post)
+                    suspend fun Up.act(parts: EndpointService.Multipart<NotAPartType>): Either<Unit, NoFail>
+                }
+
+                @ServerEndpointService("svc")
+                class ServerImpl : Svc {
+                    override suspend fun Up.act(parts: EndpointService.Multipart<NotAPartType>): Either<Unit, NoFail> = TODO()
+                }
+                """,
+            ),
+        )
+        assertEquals(KotlinCompilation.ExitCode.COMPILATION_ERROR, result.exitCode)
+        assertTrue(result.errors().any { it.contains("not annotated @Endpoint.MultipartFormData") }, result.errors().toString())
+    }
 }

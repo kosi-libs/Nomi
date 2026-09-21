@@ -10,6 +10,7 @@ import org.kodein.rest.nomi.processor.common.ksp.fq
 import org.kodein.rest.nomi.processor.common.ksp.isNomiService
 import org.kodein.rest.nomi.processor.common.ksp.visibilityOrNull
 import org.kodein.rest.nomi.processor.common.resource.ResourceAnalyzer
+import org.kodein.rest.nomi.processor.common.multipart.MultipartAnalyzer
 import org.kodein.rest.nomi.processor.common.stringer.StringerResolver
 
 /**
@@ -22,6 +23,7 @@ public class ServiceAnalyzer(private val resolver: Resolver, private val reporte
 
     private val resourceAnalyzer = ResourceAnalyzer(resolver, reporter)
     private val stringerResolver = StringerResolver(resolver, reporter)
+    private val multipartAnalyzer = MultipartAnalyzer(stringerResolver, reporter)
 
     private val cache = mutableMapOf<String, AnalyzedService?>()
     private val inProgress = mutableSetOf<String>()
@@ -78,10 +80,13 @@ public class ServiceAnalyzer(private val resolver: Resolver, private val reporte
         // fixed where it is written.
         val scopes = stringerResolver.scopesOf(serviceHierarchy(declaringService))
 
-        val (body, queries) = EndpointParamChecks.check(function, method, resource, scopes, stringerResolver, declaringService, reporter) ?: return null
+        val (payload, queries) = EndpointParamChecks.check(
+            function, method, resource, scopes, stringerResolver, multipartAnalyzer,
+            serviceHierarchy(declaringService), declaringService, reporter,
+        ) ?: return null
         val (valueType, errorType) = ReturnTypeChecks.check(function, declaringService, reporter) ?: return null
 
-        return AnalyzedEndpoint(function, declaringService, resource, method, body, queries, valueType, errorType)
+        return AnalyzedEndpoint(function, declaringService, resource, method, payload, queries, valueType, errorType)
     }
 
     /** [root] then every `@Endpoint.Service` interface it extends, transitively - breadth-first,

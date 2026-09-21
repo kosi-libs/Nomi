@@ -8,10 +8,12 @@ import org.kodein.rest.nomi.demo.shared.ArticleContent
 import org.kodein.rest.nomi.demo.shared.MPService
 import org.kodein.rest.nomi.demo.shared.Tools
 import org.kodein.rest.nomi.demo.shared.ToolsPostData
+import org.kodein.rest.nomi.server.ServerEndpointService
 import org.kodein.rest.nomi.forEachPart
 import kotlin.uuid.Uuid
 
 
+@ServerEndpointService("mp")
 class ServerMPService : MPService {
 
     override suspend fun Tools.post(parts: EndpointService.Multipart<ToolsPostData>): Either<Unit, NoFail> {

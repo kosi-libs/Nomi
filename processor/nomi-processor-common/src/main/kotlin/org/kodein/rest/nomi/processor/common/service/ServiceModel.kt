@@ -6,6 +6,7 @@ import com.google.devtools.ksp.symbol.KSFunctionDeclaration
 import com.google.devtools.ksp.symbol.KSType
 import com.google.devtools.ksp.symbol.KSValueParameter
 import com.google.devtools.ksp.symbol.Visibility
+import org.kodein.rest.nomi.processor.common.multipart.AnalyzedMultipart
 import org.kodein.rest.nomi.processor.common.path.PathSegment
 import org.kodein.rest.nomi.processor.common.resource.AnalyzedResource
 import org.kodein.rest.nomi.processor.common.stringer.StringerRef
@@ -15,12 +16,27 @@ import org.kodein.rest.nomi.processor.common.stringer.StringerRef
  * exactly, so an `@Endpoint` annotation's argument name resolves with a plain `valueOf`. */
 public enum class HttpMethod { Get, Post, Put, Patch, Delete }
 
+/** What an endpoint takes as its request, in the one unannotated first parameter. SPECS.adoc §
+ * Endpoint parameters: "An endpoint declares either an ordinary body or a `Multipart<T>` parameter,
+ * never both" - sealed so that both generators' handling of the two is compiler-checked. */
+public sealed interface RequestPayload {
+    public val declaration: KSValueParameter
+    public val name: String
+}
+
 /** The request-body parameter of an endpoint (unannotated, always first). */
 public class BodyParam(
-    public val declaration: KSValueParameter,
-    public val name: String,
+    override val declaration: KSValueParameter,
+    override val name: String,
     public val type: KSType,
-)
+) : RequestPayload
+
+/** The `Multipart<T>` parameter of an endpoint, with `T`'s analysed parts. */
+public class MultipartParam(
+    override val declaration: KSValueParameter,
+    override val name: String,
+    public val multipart: AnalyzedMultipart,
+) : RequestPayload
 
 /** One `@Endpoint.Query` parameter, already resolved. [type] is nullability-stripped; [optional]
  * records whether the *declared* parameter type was nullable (SPECS.adoc § Endpoint parameters:
@@ -42,7 +58,7 @@ public class AnalyzedEndpoint(
     public val declaringService: KSClassDeclaration,
     public val resource: AnalyzedResource,
     public val method: HttpMethod,
-    public val body: BodyParam?,
+    public val payload: RequestPayload?,
     public val queries: List<QueryParam>,
     public val valueType: KSType,
     public val errorType: KSType,

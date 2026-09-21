@@ -9,7 +9,9 @@ import com.google.devtools.ksp.symbol.KSClassDeclaration
 import com.google.devtools.ksp.validate
 import org.kodein.rest.nomi.processor.common.LoggingReporter
 import org.kodein.rest.nomi.processor.common.general.StrayAnnotationChecks
+import org.kodein.rest.nomi.processor.common.ksp.fq
 import org.kodein.rest.nomi.processor.common.service.AnalyzedService
+import org.kodein.rest.nomi.processor.common.service.MultipartParam
 import org.kodein.rest.nomi.processor.common.service.ServiceAnalyzer
 
 /**
@@ -56,10 +58,24 @@ public class NomiClientProcessor(
             if (analyzed != null) generatables += Generatable(obj, registration, analyzed)
         }
 
+        // SPECS.adoc § Client processor: builders are collected per annotated object, by part type.
+        // Two services on one object sharing a part type yield one builder; the same part type
+        // reached from two objects yields one builder on each.
+        val multipartsByObject = generatables
+            .groupBy({ it.obj }) { g ->
+                g.service.endpoints.mapNotNull { (it.payload as? MultipartParam)?.multipart }
+            }
+            .mapValues { (_, perService) -> perService.flatten().distinctBy { it.declaration.fq() } }
+
+        ClientRoundChecks(resolver, reporter).checkMultipartBuilders(multipartsByObject)
+
         // Never a partial file: generate nothing this round if any declaration it needed was invalid.
         if (reporter.errorCount == 0) {
             val generator = ClientFileGenerator(codeGenerator)
             for (g in generatables) generator.generate(g.obj, g.registration, g.service)
+
+            val multipartGenerator = MultipartBuilderGenerator(codeGenerator)
+            for ((obj, multiparts) in multipartsByObject) multipartGenerator.generate(obj, multiparts)
         }
 
         deferred = notYetResolvable

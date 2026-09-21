@@ -10,6 +10,7 @@ import org.kodein.rest.nomi.processor.common.NomiErrors
 import org.kodein.rest.nomi.processor.common.NomiFq
 import org.kodein.rest.nomi.processor.common.Reporter
 import org.kodein.rest.nomi.processor.common.ksp.fq
+import org.kodein.rest.nomi.processor.common.ksp.isNomiMultipartPartType
 import org.kodein.rest.nomi.processor.common.ksp.isNomiResource
 import org.kodein.rest.nomi.processor.common.ksp.isNomiService
 
@@ -72,12 +73,12 @@ public object StrayAnnotationChecks {
             when (symbol) {
                 is KSPropertyDeclaration -> {
                     val enclosing = symbol.parentDeclaration as? KSClassDeclaration
-                    if (enclosing == null || !enclosing.isNomiResource()) {
+                    if (enclosing == null || !(enclosing.isNomiResource() || enclosing.isMultipartPart())) {
                         reporter.error(symbol, NomiErrors.strayStringedAnnotation(symbol.fq()))
                     }
                 }
                 is KSValueParameter -> {
-                    if (!isEndpointParameter(symbol)) {
+                    if (!isEndpointParameter(symbol) && !isMultipartPartPayload(symbol)) {
                         reporter.error(symbol, NomiErrors.strayStringedAnnotation(symbol.name?.asString() ?: "?"))
                     }
                 }
@@ -90,7 +91,10 @@ public object StrayAnnotationChecks {
     // resource, a service, or (as a carrier annotation) an annotation class.
     private fun checkUseStringer(resolver: Resolver, reporter: Reporter) {
         for (declaration in resolver.getSymbolsWithAnnotation(NomiFq.USE_STRINGER, inDepth = true).filterIsInstance<KSClassDeclaration>()) {
-            val ok = declaration.isNomiResource() || declaration.isNomiService() || declaration.classKind == ClassKind.ANNOTATION_CLASS
+            // A part type is a legal carrier too: a part's Stringer scope chain starts there
+            // (SPECS.adoc § Multipart part types).
+            val ok = declaration.isNomiResource() || declaration.isNomiService() ||
+                declaration.isNomiMultipartPartType() || declaration.classKind == ClassKind.ANNOTATION_CLASS
             if (!ok) {
                 reporter.error(declaration, NomiErrors.strayUseStringerAnnotation(declaration.fq()))
             }
@@ -104,4 +108,17 @@ public object StrayAnnotationChecks {
         val function = param.parent as? KSFunctionDeclaration ?: return false
         return isEndpointFunction(function)
     }
+
+    /** A part's payload, which carries `@Endpoint.Stringed` the way a query parameter does.
+     * On a data class's primary-constructor `val`, Kotlin's applicable-target priority binds the
+     * annotation to the VALUE PARAMETER rather than the property - SPECS.adoc § Gotchas - so both
+     * positions have to be accepted. */
+    private fun isMultipartPartPayload(param: KSValueParameter): Boolean {
+        val constructor = param.parent as? KSFunctionDeclaration ?: return false
+        val owner = constructor.parentDeclaration as? KSClassDeclaration ?: return false
+        return owner.isMultipartPart()
+    }
+
+    private fun KSClassDeclaration.isMultipartPart(): Boolean =
+        (parentDeclaration as? KSClassDeclaration)?.isNomiMultipartPartType() == true
 }

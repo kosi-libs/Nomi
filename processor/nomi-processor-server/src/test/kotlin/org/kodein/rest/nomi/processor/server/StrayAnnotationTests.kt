@@ -281,4 +281,82 @@ class StrayAnnotationTests {
         )
         assertEquals(KotlinCompilation.ExitCode.OK, result.exitCode, result.errors().joinToString("\n"))
     }
+
+    @Test
+    fun `accepts Endpoint Stringed on a multipart part payload`() {
+        val result = compile(
+            SourceFile.kotlin(
+                "parts.kt",
+                """
+                package test
+                import org.kodein.rest.nomi.Endpoint
+                import org.kodein.rest.nomi.EndpointService
+                import org.kodein.rest.nomi.Either
+                import org.kodein.rest.nomi.NoFail
+                import org.kodein.rest.nomi.Stringer
+                import org.kodein.rest.nomi.server.ServerEndpointService
+
+                @Endpoint.Resource
+                interface Up
+
+                @Endpoint.MultipartFormData
+                sealed interface Upload {
+                    data class Note(@Endpoint.Stringed(Stringer.Builtins.StringStringer::class) val note: String) : Upload
+                }
+
+                @Endpoint.Service
+                interface Svc : EndpointService {
+                    @Endpoint(Endpoint.Method.Post)
+                    suspend fun Up.post(parts: EndpointService.Multipart<Upload>): Either<Unit, NoFail>
+                }
+
+                @ServerEndpointService("svc")
+                class ServerImpl : Svc {
+                    override suspend fun Up.post(parts: EndpointService.Multipart<Upload>): Either<Unit, NoFail> = TODO()
+                }
+                """,
+            ),
+        )
+        assertEquals(KotlinCompilation.ExitCode.OK, result.exitCode, result.errors().joinToString("\n"))
+    }
+
+    @Test
+    fun `accepts Endpoint UseStringer on a multipart part type`() {
+        val result = compile(
+            SourceFile.kotlin(
+                "parts.kt",
+                """
+                package test
+                import org.kodein.rest.nomi.Endpoint
+                import org.kodein.rest.nomi.EndpointFile
+                import org.kodein.rest.nomi.EndpointService
+                import org.kodein.rest.nomi.Either
+                import org.kodein.rest.nomi.NoFail
+                import org.kodein.rest.nomi.Stringer
+                import org.kodein.rest.nomi.server.ServerEndpointService
+
+                @Endpoint.Resource
+                interface Up
+
+                @Endpoint.MultipartFormData
+                @Endpoint.UseStringer(String::class, Stringer.Builtins.StringStringer::class)
+                sealed interface Upload {
+                    data class Note(val note: String) : Upload
+                }
+
+                @Endpoint.Service
+                interface Svc : EndpointService {
+                    @Endpoint(Endpoint.Method.Post)
+                    suspend fun Up.post(parts: EndpointService.Multipart<Upload>): Either<Unit, NoFail>
+                }
+
+                @ServerEndpointService("svc")
+                class ServerImpl : Svc {
+                    override suspend fun Up.post(parts: EndpointService.Multipart<Upload>): Either<Unit, NoFail> = TODO()
+                }
+                """,
+            ),
+        )
+        assertEquals(KotlinCompilation.ExitCode.OK, result.exitCode, result.errors().joinToString("\n"))
+    }
 }

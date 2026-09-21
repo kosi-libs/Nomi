@@ -40,4 +40,10 @@ public object NomiClientErrors {
 
     public fun collidesWithUserDeclaration(generated: String): String =
         "generated client implementation '$generated' collides with an existing declaration in this package"
+
+    public fun multipartBuilderNameCollision(first: String, second: String, generatedName: String): String =
+        "part types '$first' and '$second' both generate the multipart builder name '$generatedName' on this factory object"
+
+    public fun multipartBuilderCollidesWithMember(objectName: String, generatedName: String): String =
+        "the multipart builder '$generatedName' generated on '$objectName' collides with a member it already declares"
 }

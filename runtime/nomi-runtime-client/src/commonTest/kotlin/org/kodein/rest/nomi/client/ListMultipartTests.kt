@@ -36,7 +36,7 @@ class ListMultipartTests {
     }
 
     @Test
-    fun `keeps a repeated part, once per occurrence`() = runTest {
+    fun `keeps a repeated part - once per occurrence`() = runTest {
         // Several files under one part name is an ordinary form, and must survive as-is.
         val a = endpointFile("a")
         val b = endpointFile("b")

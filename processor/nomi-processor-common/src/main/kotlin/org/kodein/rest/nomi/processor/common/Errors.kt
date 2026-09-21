@@ -324,6 +324,50 @@ public object NomiErrors {
     public fun endpointQueryNameCollidesWithPathParam(endpoint: String, wireName: String): String =
         "endpoint '$endpoint': query parameter '$wireName' collides with a path parameter of the same name along its resource chain"
 
+    // --- Multipart part types --------------------------------------------------------------------
+
+    public fun endpointMultipartAndBody(endpoint: String): String =
+        "endpoint '$endpoint' declares both a request body and a Multipart parameter - an endpoint has one or the other, never both"
+
+    public fun endpointMultipartTypeArgumentMissing(endpoint: String): String =
+        "endpoint '$endpoint': Multipart must name its part type - a star projection or a missing type argument is not allowed"
+
+    public fun endpointMultipartNotAPartType(endpoint: String, type: String): String =
+        "endpoint '$endpoint': Multipart's type argument '$type' is not annotated @Endpoint.MultipartFormData"
+
+    public fun partTypeNotSealedInterface(partType: String, kind: String): String =
+        "part type '$partType' must be a sealed interface, but is $kind"
+
+    public fun partTypeNoParts(partType: String): String =
+        "part type '$partType' must declare at least one part"
+
+    public fun partNotNestedInPartType(partType: String, part: String): String =
+        "part '$part' must be declared inside part type '$partType' - a part declared elsewhere cannot be enumerated"
+
+    public fun partNotDataClass(partType: String, part: String, kind: String): String =
+        "part '$part' of part type '$partType' must be a data class, but is $kind"
+
+    public fun partHasTypeParameters(part: String): String =
+        "part '$part' must not declare type parameters"
+
+    public fun partPropertyCount(part: String, count: Int): String =
+        "part '$part' must declare exactly one val property carrying its payload, but declares $count"
+
+    public fun partPropertyIsVar(part: String, property: String): String =
+        "part '$part': payload property '$property' must be a val, not a var"
+
+    public fun partNameInvalid(part: String, wireName: String): String =
+        "part '$part': name '$wireName' must be non-blank and match [A-Za-z_][A-Za-z0-9_.-]*"
+
+    public fun partNameCollision(partType: String, wireName: String): String =
+        "part type '$partType' has two parts resolving to the same name '$wireName'"
+
+    public fun partPresenceUnknown(part: String, presence: String): String =
+        "part '$part': unknown presence '$presence'"
+
+    public fun partPayloadForbiddenType(part: String, type: String): String =
+        "part '$part': payload must not be $type"
+
     // --- Endpoint return types -------------------------------------------------------------------
 
     public fun endpointReturnNotEither(name: String): String =

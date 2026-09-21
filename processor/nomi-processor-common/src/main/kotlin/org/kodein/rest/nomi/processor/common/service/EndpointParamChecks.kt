@@ -13,6 +13,9 @@ import org.kodein.rest.nomi.processor.common.general.GeneralChecks
 import org.kodein.rest.nomi.processor.common.ksp.ARRAY_FQ_NAMES
 import org.kodein.rest.nomi.processor.common.ksp.annotationNamed
 import org.kodein.rest.nomi.processor.common.ksp.expandTypealias
+import org.kodein.rest.nomi.processor.common.ksp.fq
+import org.kodein.rest.nomi.processor.common.ksp.isNomiMultipartPartType
+import org.kodein.rest.nomi.processor.common.multipart.MultipartAnalyzer
 import org.kodein.rest.nomi.processor.common.ksp.stringArg
 import org.kodein.rest.nomi.processor.common.path.IDENTIFIER_REGEX
 import org.kodein.rest.nomi.processor.common.resource.AnalyzedResource
@@ -34,12 +37,14 @@ public object EndpointParamChecks {
         resource: AnalyzedResource,
         scopes: List<List<Registration<String, KSClassDeclaration>>>,
         stringerResolver: StringerResolver,
+        multipartAnalyzer: MultipartAnalyzer,
+        serviceScopeChain: List<KSClassDeclaration>,
         user: KSDeclaration,
         reporter: Reporter,
-    ): Pair<BodyParam?, List<QueryParam>>? {
+    ): Pair<RequestPayload?, List<QueryParam>>? {
         val endpointName = function.simpleName.asString()
         var ok = true
-        var body: BodyParam? = null
+        var payload: RequestPayload? = null
         val queries = mutableListOf<QueryParam>()
 
         for ((index, param) in function.parameters.withIndex()) {
@@ -56,8 +61,10 @@ public object EndpointParamChecks {
                     ok = false
                     continue
                 }
-                val checked = checkBody(param, paramName, method, user, endpointName, reporter)
-                if (checked == null) ok = false else body = checked
+                val checked = checkPayload(
+                    param, paramName, method, multipartAnalyzer, serviceScopeChain, user, endpointName, reporter,
+                )
+                if (checked == null) ok = false else payload = checked
             } else {
                 val checked = checkQuery(param, paramName, queryAnnotation, scopes, stringerResolver, user, endpointName, reporter)
                 if (checked == null) ok = false else queries += checked
@@ -66,7 +73,82 @@ public object EndpointParamChecks {
 
         if (!checkNoQueryNameCollisions(endpointName, queries, resource, reporter)) ok = false
 
-        return if (ok) body to queries else null
+        return if (ok) payload to queries else null
+    }
+
+    /** The one unannotated first parameter is either a `Multipart<T>` or an ordinary body; the two
+     * are mutually exclusive by construction, since there is only ever one such parameter. */
+    private fun checkPayload(
+        param: KSValueParameter,
+        paramName: String,
+        method: HttpMethod,
+        multipartAnalyzer: MultipartAnalyzer,
+        serviceScopeChain: List<KSClassDeclaration>,
+        user: KSDeclaration,
+        endpointName: String,
+        reporter: Reporter,
+    ): RequestPayload? {
+        val rawType = param.type.resolve()
+        if (rawType.isError) return null // deferred to the next round, not a validation error
+        val isMultipart = rawType.expandTypealias().declaration.qualifiedName?.asString() == NomiFq.MULTIPART
+        return if (isMultipart) {
+            checkMultipart(param, paramName, method, multipartAnalyzer, serviceScopeChain, user, endpointName, reporter)
+        } else {
+            checkBody(param, paramName, method, user, endpointName, reporter)
+        }
+    }
+
+    private fun checkMultipart(
+        param: KSValueParameter,
+        paramName: String,
+        method: HttpMethod,
+        multipartAnalyzer: MultipartAnalyzer,
+        serviceScopeChain: List<KSClassDeclaration>,
+        user: KSDeclaration,
+        endpointName: String,
+        reporter: Reporter,
+    ): MultipartParam? {
+        var ok = true
+        // A multipart body is a request body, and obeys every rule one does - SPECS.adoc §
+        // Endpoint parameters.
+        if (method != HttpMethod.Post && method != HttpMethod.Put && method != HttpMethod.Patch) {
+            reporter.error(param, NomiErrors.endpointBodyOnGetOrDelete(endpointName, method.name))
+            ok = false
+        }
+        if (param.isVararg) {
+            reporter.error(param, NomiErrors.endpointBodyIsVararg(endpointName))
+            ok = false
+        }
+        if (param.hasDefault) {
+            reporter.error(param, NomiErrors.endpointBodyHasDefault(endpointName))
+            ok = false
+        }
+        if (param.annotationNamed(NomiFq.STRINGED) != null) {
+            reporter.error(param, NomiErrors.endpointBodyHasStringed(endpointName))
+            ok = false
+        }
+
+        val type = param.type.resolve().expandTypealias()
+        if (type.isMarkedNullable) {
+            reporter.error(param, NomiErrors.endpointBodyNullable(endpointName))
+            ok = false
+        }
+
+        val argument = type.arguments.singleOrNull()?.type?.resolve()
+        if (argument == null || argument.isError) {
+            reporter.error(param, NomiErrors.endpointMultipartTypeArgumentMissing(endpointName))
+            return null
+        }
+        val partType = argument.expandTypealias().declaration as? KSClassDeclaration
+        if (partType == null || !partType.isNomiMultipartPartType()) {
+            reporter.error(param, NomiErrors.endpointMultipartNotAPartType(endpointName, argument.declaration.fq()))
+            return null
+        }
+        if (!GeneralChecks.checkAtLeastAsVisible(partType, user, reporter)) ok = false
+
+        val analyzed = multipartAnalyzer.analyze(partType, serviceScopeChain, user) ?: return null
+
+        return if (ok) MultipartParam(param, paramName, analyzed) else null
     }
 
     private fun checkBody(param: KSValueParameter, paramName: String, method: HttpMethod, user: KSDeclaration, endpointName: String, reporter: Reporter): BodyParam? {

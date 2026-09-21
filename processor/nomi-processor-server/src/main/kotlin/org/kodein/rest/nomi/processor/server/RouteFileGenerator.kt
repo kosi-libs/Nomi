@@ -11,8 +11,12 @@ import com.squareup.kotlinpoet.MemberName
 import com.squareup.kotlinpoet.ksp.toClassName
 import com.squareup.kotlinpoet.ksp.toKModifier
 import com.squareup.kotlinpoet.ksp.writeTo
+import org.kodein.rest.nomi.processor.common.multipart.MultipartPart
+import org.kodein.rest.nomi.processor.common.multipart.PartPayload
 import org.kodein.rest.nomi.processor.common.resource.AnalyzedResource
 import org.kodein.rest.nomi.processor.common.service.AnalyzedEndpoint
+import org.kodein.rest.nomi.processor.common.service.BodyParam
+import org.kodein.rest.nomi.processor.common.service.MultipartParam
 import org.kodein.rest.nomi.processor.common.service.HttpMethod
 import org.kodein.rest.nomi.processor.common.service.QueryParam
 import org.kodein.rest.nomi.processor.common.stringer.StringerRef
@@ -26,6 +30,12 @@ private val RESPOND = MemberName("org.kodein.rest.nomi.server", "respond")
 private val DECODE = MemberName("org.kodein.rest.nomi.server", "decode")
 private val DECODE_OR_NULL = MemberName("org.kodein.rest.nomi.server", "decodeOrNull")
 private val DECODE_REQUIRED = MemberName("org.kodein.rest.nomi.server", "decodeRequired")
+private val ENDPOINT_MULTIPART_RECEIVER = ClassName("org.kodein.rest.nomi.server", "EndpointMultipartReceiver")
+private val RECEIVE_MULTIPART = MemberName("io.ktor.server.request", "receiveMultipart")
+private val AS_ENDPOINT_VALUE = MemberName("org.kodein.rest.nomi.server", "asEndpointValue")
+private val HTTP_ERROR = MemberName("org.kodein.rest.nomi.server", "httpError")
+private val HTTP_STATUS_CODE = ClassName("io.ktor.http", "HttpStatusCode")
+private val PART_PRESENCE = ClassName("org.kodein.rest.nomi", "Endpoint", "MultipartFormData", "PartPresence")
 
 private fun httpMethodMember(method: HttpMethod): MemberName =
     MemberName("io.ktor.server.routing", method.name.lowercase())
@@ -89,7 +99,11 @@ public class RouteFileGenerator(private val codeGenerator: CodeGenerator) {
         builder.add(renderResourceConstruction(endpoint.resource))
 
         val args = buildList {
-            endpoint.body?.let { add(CodeBlock.of("%N = call.%M()", it.name, RECEIVE)) }
+            when (val payload = endpoint.payload) {
+                null -> Unit
+                is BodyParam -> add(CodeBlock.of("%N = call.%M()", payload.name, RECEIVE))
+                is MultipartParam -> add(renderMultipartArg(payload))
+            }
             endpoint.queries.forEach { add(renderQueryArg(it)) }
         }
         if (args.isEmpty()) {
@@ -121,6 +135,57 @@ public class RouteFileGenerator(private val codeGenerator: CodeGenerator) {
         builder.unindent()
         builder.add(")")
         return builder.build()
+    }
+
+    // parts = EndpointMultipartReceiver(
+    //     service = this,
+    //     multipart = call.receiveMultipart(),
+    //     parts = mapOf("file" to PartPresence.Required),
+    // ) {
+    //     when (it.name) {
+    //         "file" -> Upload.File(it.asEndpointFile("file"))
+    //         else -> httpError(HttpStatusCode.BadRequest, "Unknown part '${'$'}{it.name}'")
+    //     }
+    // }
+    private fun renderMultipartArg(payload: MultipartParam): CodeBlock {
+        val builder = CodeBlock.builder()
+        builder.add("%N = %T(\n", payload.name, ENDPOINT_MULTIPART_RECEIVER)
+        builder.indent()
+        builder.add("service = this,\n")
+        builder.add("multipart = call.%M(),\n", RECEIVE_MULTIPART)
+        builder.add("parts = mapOf(\n")
+        builder.indent()
+        for (part in payload.multipart.parts) {
+            builder.add("%S to %T.%N,\n", part.wireName, PART_PRESENCE, part.presence.name)
+        }
+        builder.unindent()
+        builder.add("),\n")
+        builder.unindent()
+        // A trailing lambda on an expression being built mid-CodeBlock: literal braces, never
+        // beginControlFlow, which would break the enclosing argument list.
+        builder.add(") {\n")
+        builder.indent()
+        builder.add("when (it.name) {\n")
+        builder.indent()
+        for (part in payload.multipart.parts) {
+            builder.add("%S -> %T(%L)\n", part.wireName, part.declaration.toClassName(), renderPartDecode(part))
+        }
+        builder.add(
+            "else -> %M(%T.BadRequest, \"Unknown part '\${it.name}'\")\n",
+            HTTP_ERROR, HTTP_STATUS_CODE,
+        )
+        builder.unindent()
+        builder.add("}\n")
+        builder.unindent()
+        builder.add("}")
+        return builder.build()
+    }
+
+    private fun renderPartDecode(part: MultipartPart): CodeBlock = when (val payload = part.payload) {
+        // asEndpointFile is a PartScope member extension - resolved inside the transform lambda,
+        // so it must NOT be emitted as a MemberName (that would import something unusable).
+        is PartPayload.File -> CodeBlock.of("it.asEndpointFile(%S)", part.wireName)
+        is PartPayload.Value -> CodeBlock.of("it.%M(%S, %L)", AS_ENDPOINT_VALUE, part.wireName, stringerCodeBlock(payload.stringer))
     }
 
     private fun renderQueryArg(query: QueryParam): CodeBlock =

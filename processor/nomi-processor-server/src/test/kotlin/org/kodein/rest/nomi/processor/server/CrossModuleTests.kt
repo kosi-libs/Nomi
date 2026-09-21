@@ -120,4 +120,63 @@ class CrossModuleTests {
         assertEquals(KotlinCompilation.ExitCode.COMPILATION_ERROR, moduleB.exitCode)
         assertTrue(moduleB.errors().any { it.contains("generated implementation") }, moduleB.errors().toString())
     }
+
+    @Test
+    fun `generates a multipart receiver for a part type declared in a compiled dependency`() {
+        // The part type is read as a classpath class, not source - which is where an omitted
+        // `presence` argument has to fall back to the annotation's own default.
+        val moduleA = compile(SourceFile.kotlin("parts.kt", """
+                package moduleA
+                import org.kodein.rest.nomi.Endpoint
+                import org.kodein.rest.nomi.Endpoint.MultipartFormData.PartPresence
+                import org.kodein.rest.nomi.EndpointFile
+                import org.kodein.rest.nomi.EndpointService
+                import org.kodein.rest.nomi.Either
+                import org.kodein.rest.nomi.NoFail
+
+                @Endpoint.Resource
+                interface Up
+
+                @Endpoint.MultipartFormData
+                sealed interface Upload {
+                    data class File(val `file`: EndpointFile) : Upload
+                    @Endpoint.MultipartFormData.Part(name = "note", presence = PartPresence.RepeatedRequired)
+                    data class Note(val note: String) : Upload
+                }
+
+                @Endpoint.Service
+                interface Svc : EndpointService {
+                    @Endpoint(Endpoint.Method.Post)
+                    suspend fun Up.post(parts: EndpointService.Multipart<Upload>): Either<Unit, NoFail>
+                }
+"""))
+        assertEquals(KotlinCompilation.ExitCode.OK, moduleA.exitCode, moduleA.errors().joinToString("\n"))
+
+        val moduleB = compileWith(
+            moduleA,
+            SourceFile.kotlin(
+                "server.kt",
+                """
+                package moduleB
+                import moduleA.Up
+                import moduleA.Svc
+                import moduleA.Upload
+                import org.kodein.rest.nomi.EndpointService
+                import org.kodein.rest.nomi.Either
+                import org.kodein.rest.nomi.NoFail
+                import org.kodein.rest.nomi.server.ServerEndpointService
+
+                @ServerEndpointService("svc")
+                class ServerImpl : Svc {
+                    override suspend fun Up.post(parts: EndpointService.Multipart<Upload>): Either<Unit, NoFail> = TODO()
+                }
+                """,
+            ),
+        )
+        assertEquals(KotlinCompilation.ExitCode.OK, moduleB.exitCode, moduleB.errors().joinToString("\n"))
+        val generated = moduleB.generated("NomiServerImplRoutes.kt")
+        assertTrue(generated.contains("\"file\" to Endpoint.MultipartFormData.PartPresence.Required"), generated)
+        assertTrue(generated.contains("\"note\" to Endpoint.MultipartFormData.PartPresence.RepeatedRequired"), generated)
+        assertTrue(generated.contains("moduleA.Upload"), generated)
+    }
 }

@@ -66,6 +66,9 @@ public fun KSClassDeclaration.isNomiResource(): Boolean = annotationsNamed(NomiF
 
 public fun KSClassDeclaration.isNomiService(): Boolean = annotationsNamed(NomiFq.SERVICE).any()
 
+/** Whether this is a `@Endpoint.MultipartFormData` part type. */
+public fun KSClassDeclaration.isNomiMultipartPartType(): Boolean = annotationsNamed(NomiFq.MULTIPART_FORM_DATA).any()
+
 /** Every array type's FQN - forbidden wherever Nomi reads a type that must resolve a `Stringer`
  * (a resource path parameter, an endpoint query parameter). Shared so both live in exactly one place. */
 public val ARRAY_FQ_NAMES: Set<String> = setOf(

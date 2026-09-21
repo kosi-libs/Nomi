@@ -111,4 +111,53 @@ class CrossModuleTests {
         assertEquals(KotlinCompilation.ExitCode.COMPILATION_ERROR, moduleB.exitCode)
         assertTrue(moduleB.errors().any { it.contains("generated implementation") }, moduleB.errors().toString())
     }
+
+    @Test
+    fun `generates a multipart builder for a part type declared in a compiled dependency`() {
+        val moduleA = compile(SourceFile.kotlin("parts.kt", """
+                package moduleA
+                import org.kodein.rest.nomi.Endpoint
+                import org.kodein.rest.nomi.Endpoint.MultipartFormData.PartPresence
+                import org.kodein.rest.nomi.EndpointFile
+                import org.kodein.rest.nomi.EndpointService
+                import org.kodein.rest.nomi.Either
+                import org.kodein.rest.nomi.NoFail
+
+                @Endpoint.Resource
+                interface Up
+
+                @Endpoint.MultipartFormData
+                sealed interface Upload {
+                    data class File(val `file`: EndpointFile) : Upload
+                    @Endpoint.MultipartFormData.Part(name = "note", presence = PartPresence.RepeatedRequired)
+                    data class Note(val note: String) : Upload
+                }
+
+                @Endpoint.Service
+                interface Svc : EndpointService {
+                    @Endpoint(Endpoint.Method.Post)
+                    suspend fun Up.post(parts: EndpointService.Multipart<Upload>): Either<Unit, NoFail>
+                }
+"""))
+        assertEquals(KotlinCompilation.ExitCode.OK, moduleA.exitCode, moduleA.errors().joinToString("\n"))
+
+        val moduleB = compileWith(
+            moduleA,
+            SourceFile.kotlin(
+                "factory.kt",
+                """
+                package moduleB
+                import moduleA.Svc
+                import org.kodein.rest.nomi.client.ClientEndpointServiceFactory
+
+                @ClientEndpointServiceFactory(Svc::class, "svc")
+                object Factories
+                """,
+            ),
+        )
+        assertEquals(KotlinCompilation.ExitCode.OK, moduleB.exitCode, moduleB.errors().joinToString("\n"))
+        val generated = moduleB.generated("NomiFactoriesMultipart.kt")
+        assertTrue(generated.contains("fun Factories.multipartUpload"), generated)
+        assertTrue(generated.contains("note: List<"), generated)
+    }
 }

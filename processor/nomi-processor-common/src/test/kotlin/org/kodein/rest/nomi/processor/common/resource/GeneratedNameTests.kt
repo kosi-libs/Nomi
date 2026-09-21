@@ -41,4 +41,19 @@ class GeneratedNameTests {
     fun `sanitizes non-identifier characters out of the source file name`() {
         assertEquals("NomiMyendpointsResources", generatedResourcesFileName("my-endpoints.kt"))
     }
+
+    @Test
+    fun `multipartBuilderName prefixes the part type's simple names with multipart`() {
+        assertEquals("multipartToolsPostData", multipartBuilderName(listOf("ToolsPostData")))
+    }
+
+    @Test
+    fun `multipartBuilderName concatenates enclosing names outermost first`() {
+        assertEquals("multipartOuterUpload", multipartBuilderName(listOf("Outer", "Upload")))
+    }
+
+    @Test
+    fun `generatedMultipartFileName wraps the object name`() {
+        assertEquals("NomiAPIServicesMultipart", generatedMultipartFileName("APIServices"))
+    }
 }

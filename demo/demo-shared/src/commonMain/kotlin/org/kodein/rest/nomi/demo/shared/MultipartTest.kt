@@ -12,6 +12,7 @@ import org.kodein.rest.nomi.Stringer
 import kotlin.uuid.Uuid
 
 
+@Endpoint.Service
 @UseSharedStringers
 interface MPService : EndpointService {
 
@@ -39,7 +40,7 @@ sealed interface ToolsPostData {
 
     @Endpoint.MultipartFormData.Part(name = "article", presence = PartPresence.RepeatedRequired)
     data class With(
-        //@Endpoint.Stringed(ArticleContentJsonStringer::class)
+        @Endpoint.Stringed(ArticleContentJsonStringer::class)
         val content: ArticleContent,
     ) : ToolsPostData
 

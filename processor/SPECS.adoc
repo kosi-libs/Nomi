@@ -538,9 +538,9 @@ post {
                 service = this,
                 multipart = call.receiveMultipart(),
                 parts = mapOf(
-                    "file" to PartPresence.Required,
-                    "from" to PartPresence.Optional,
-                    "article" to PartPresence.RepeatedRequired,
+                    "file" to Endpoint.MultipartFormData.PartPresence.Required,
+                    "from" to Endpoint.MultipartFormData.PartPresence.Optional,
+                    "article" to Endpoint.MultipartFormData.PartPresence.RepeatedRequired,
                 ),
             ) {
                 when (it.name) {
@@ -635,6 +635,9 @@ therefore free of any `companion object` requirement — named `multipart` follo
 <<generated-name-collisions,Generated-name collisions>>. It takes one parameter per part, named after the *subtype's*
 simple name lowercased, whose type and default come from the part's presence per the table in
 <<multipart-part-types,Multipart part types>>.
+
+Every builder of one object goes into a single generated file, `Nomi<Object>Multipart.kt`, beside
+the per-service `Nomi<Object><Service>Client.kt`.
 
 Builders are collected *per annotated object, by part type*:
 

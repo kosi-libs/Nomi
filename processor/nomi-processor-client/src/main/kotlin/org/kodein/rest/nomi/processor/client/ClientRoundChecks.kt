@@ -4,7 +4,9 @@ import com.google.devtools.ksp.getClassDeclarationByName
 import com.google.devtools.ksp.processing.Resolver
 import com.google.devtools.ksp.symbol.KSClassDeclaration
 import org.kodein.rest.nomi.processor.common.Reporter
+import com.google.devtools.ksp.getDeclaredFunctions
 import org.kodein.rest.nomi.processor.common.ksp.fq
+import org.kodein.rest.nomi.processor.common.multipart.AnalyzedMultipart
 
 /**
  * SPECS.adoc § Generated-name collisions - the two client-related bullets that need the whole round's
@@ -43,6 +45,23 @@ public class ClientRoundChecks(private val resolver: Resolver, private val repor
             val existing = resolver.getClassDeclarationByName(fqImplName) ?: continue
             if (existing.containingFile?.filePath in userSourceFilePaths) {
                 reporter.error(obj, NomiClientErrors.collidesWithUserDeclaration(fqImplName))
+            }
+        }
+    }
+
+    /** SPECS.adoc § Generated-name collisions: two part types reached from the same factory object
+     * must not produce the same builder name, and a builder must not collide with a resolvable user
+     * declaration on that object. */
+    internal fun checkMultipartBuilders(multipartsByObject: Map<KSClassDeclaration, List<AnalyzedMultipart>>) {
+        for ((obj, multiparts) in multipartsByObject) {
+            val byName = multiparts.groupBy { builderNameOf(it.declaration) }
+            for ((name, group) in byName) {
+                for (i in 1 until group.size) {
+                    reporter.error(obj, NomiClientErrors.multipartBuilderNameCollision(group[0].declaration.fq(), group[i].declaration.fq(), name))
+                }
+                if (obj.getDeclaredFunctions().any { it.simpleName.asString() == name }) {
+                    reporter.error(obj, NomiClientErrors.multipartBuilderCollidesWithMember(obj.fq(), name))
+                }
             }
         }
     }
