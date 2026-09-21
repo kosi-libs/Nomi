@@ -32,10 +32,59 @@ public class EndpointStatusCodeException(public val code: HttpStatusCode, public
 @InternalNomiAPI
 public class EndpointNetworkException(message: String?, override val cause: Throwable) : EndpointException(message, cause)
 
+/**
+ * What a generated client implementation is, beyond the service interface it implements: the two
+ * things its [ServiceCaller] hands its constructor, which [call] reads back off it.
+ */
 @InternalNomiAPI
 public interface NomiClientEndpointService : EndpointService {
-    public val buildRequest: HttpRequestBuilder.() -> Unit
+
+    /** Applied to every request this instance makes, after the endpoint's own building. `null` for
+     * the shared instance a plain `call` uses. */
+    public val buildRequest: ServiceCaller.KtorRequestBuilder?
+
+    /** Set when the caller asked for the response to stay open - see
+     * [ServiceCaller.StreamingResponseHandler]. `null` makes [call] read the response eagerly. */
+    public val streamingHandler: ServiceCaller.StreamingResponseHandler<*, *, *>?
 }
+
+/** Reads a response into the endpoint's `Either`, per README.adoc § Wire protocol: `204` is the
+ * empty success, `422` the business failure, any other non-success an [EndpointStatusCodeException]. */
+@InternalNomiAPI
+private suspend fun <S, F : Error> HttpResponse.eitherBody(
+    successType: TypeInfo,
+    errorType: TypeInfo,
+): Either<S, F> =
+    if (status.isSuccess()) {
+        if (status == HttpStatusCode.NoContent) {
+            @Suppress("UNCHECKED_CAST")
+            if (successType.type == Unit::class) unit<F>() as Either<S, F>
+            else value(null as S)
+        } else value(body(successType))
+    } else {
+        if (status == HttpStatusCode.UnprocessableEntity) error(body(errorType))
+        else throw EndpointStatusCodeException(status, bodyAsText())
+    }
+
+/** Wraps the transport in [EndpointNetworkException], leaving cancellation and client
+ * misconfiguration (an `IllegalStateException`, typically a missing `ContentNegotiation`) to
+ * propagate untouched. */
+@InternalNomiAPI
+private inline fun <R> callTry(block: () -> R): R =
+    try {
+        block()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: IllegalStateException) {
+        throw e
+    } catch (e: EndpointException) {
+        // Nomi's own control flow, not a transport failure. It matters in the streaming branch,
+        // where the response is read *inside* this block: without this, an unexpected status would
+        // arrive as a NetworkFailure there and as a ServerFailure on the non-streaming path.
+        throw e
+    } catch (e: Throwable) {
+        throw EndpointNetworkException(e.message, e)
+    }
 
 @InternalNomiAPI
 @PublishedApi
@@ -45,35 +94,55 @@ internal suspend fun <S, F : Error> HttpClient.call(
     errorType: TypeInfo,
     pathSegments: List<String>,
     method: HttpMethod,
-    buildRequest: suspend HttpRequestBuilder.() -> Unit = {}
+    buildRequest: ServiceCaller.KtorRequestBuilder = {}
 ): Either<S, F> {
+    // Nothing is sent yet: prepareRequest describes the request, and one of the two branches below
+    // is what actually executes it. The endpoint's own building runs first and the caller's
+    // per-call customization second, so a caller can override what the endpoint set.
     val statement = prepareRequest {
         url.pathSegments += pathSegments
         this.method = method
         buildRequest(this)
-        service.buildRequest(this)
+        service.buildRequest?.invoke(this)
     }
-    val response = try {
-        statement.execute()
-    } catch (e: CancellationException) {
-        throw e
-    } catch (e: IllegalStateException) {
-        throw e
-    } catch (e: Throwable) {
-        throw EndpointNetworkException(e.message, e)
-    }
-    if (response.status.isSuccess()) {
-        if (response.status == HttpStatusCode.NoContent) {
-            @Suppress("UNCHECKED_CAST")
-            return (
-                if (successType.type == Unit::class) unit<F>() as Either<S, F>
-                else value(null as S)
-            )
+
+    // The whole streaming feature is this fork: whether a caller asked for the response to stay
+    // open, and so whether the body is read within a scope or saved up front.
+    val streamingHandler = service.streamingHandler
+    if (streamingHandler != null) {
+        // Cast 3, narrowing back what NomiServiceCaller.callStreaming had to widen to <*, *, *>.
+        // S and F are recovered from this function's own type parameters, which is sound because
+        // the handler was installed for exactly one `call { }` lambda, and that lambda's declared
+        // Either<S, F> is this endpoint's. (A lambda invoking two different endpoints would hand
+        // the same handler two different S/F pairs - don't.)
+        //
+        // R is pinned to Any because this function has no R of its own: it never inspects what the
+        // handler returns, it only passes it along. Any is enough to invoke the handler.
+        @Suppress("UNCHECKED_CAST")
+        streamingHandler as ServiceCaller.StreamingResponseHandler<S, Any, F>
+        val result = callTry {
+            // The handler runs *inside* execute's block, so the response is still open while it
+            // works. It is handed a function rather than a value: nothing is read until it calls,
+            // and eitherBody - the read - therefore happens within this scope too.
+            statement.execute { response ->
+                streamingHandler { response.eitherBody(successType, errorType) }
+            }
         }
-        return value(response.body(successType))
+        // Cast 4, the same relabelling as cast 2 and for the same reason: `result` is the
+        // handler's Either<R, F>, but this function's signature - and the generated endpoint method
+        // calling it - can only speak of Either<S, F>. Either is a value class over one Any?, so
+        // both are the same object; callStreaming casts it back and discriminates it with R's
+        // NType. Nothing else can land here: callStreaming is the only thing that sets a handler.
+        @Suppress("UNCHECKED_CAST")
+        return result as Either<S, F>
+    } else {
+        // No handler: execute() saves the whole body before returning, so the response is closed
+        // by the time eitherBody reads it - from memory. Note eitherBody sits *outside* callTry
+        // here, while the streaming branch has it inside; that is why callTry must let
+        // EndpointException through, or the two branches would disagree about an unexpected status.
+        val response = callTry { statement.execute() }
+        return response.eitherBody(successType, errorType)
     }
-    if (response.status == HttpStatusCode.UnprocessableEntity) return error(response.body(errorType))
-    throw EndpointStatusCodeException(response.status, response.bodyAsText())
 }
 
 @InternalNomiAPI
@@ -81,7 +150,7 @@ context(service: NomiClientEndpointService)
 public suspend inline fun <reified S, reified F : Error> HttpClient.call(
     pathSegments: List<String>,
     method: HttpMethod,
-    noinline buildRequest: suspend HttpRequestBuilder.() -> Unit = {}
+    noinline buildRequest: ServiceCaller.KtorRequestBuilder = {}
 ): Either<S, F> = call(
     pathSegments = pathSegments,
     successType = typeInfo<S>(),
@@ -128,6 +197,14 @@ public fun HttpRequestBuilder.setEndpointBinaryBody(binary: EndpointBinary) {
     )
 }
 
+/**
+ * An outgoing [EndpointService.Multipart] over a plain list of parts, which is what a generated
+ * multipart builder returns.
+ *
+ * Single-pass in both directions: consuming one twice fails loudly rather than quietly sending an
+ * empty body, so a builder's result is good for one call. Nothing here is released - the
+ * ``EndpointFile``s in an outgoing part belong to the caller, unlike a part the server received.
+ */
 @InternalNomiAPI
 public class ListMultipart<T : Any>(private val parts: List<T>) : EndpointService.Multipart<T> {
 

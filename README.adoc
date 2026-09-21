@@ -394,8 +394,9 @@ connection by then. Read what you need while you are still in the endpoint.
 ``EndpointBinary`` and ``EndpointFile`` are not interchangeable, and Nomi says so rather than
 letting either fail at runtime: an `EndpointFile` is one part of a multipart body and carries a file
 name, so it is rejected as a whole body; an `EndpointBinary` is a whole body, so it is rejected as a
-part payload. A streamed *response* is not supported — `EndpointBinary` as an endpoint's success
-type is an error.
+part payload. `EndpointBinary` describes a *request* body only: as an endpoint's success type it is
+an error. To consume a *response* as a stream, keep the endpoint's ordinary return type and read it
+inside <<streaming-a-response,``callStreaming``>>.
 
 === Query parameters
 
@@ -983,6 +984,42 @@ val result = APIServices.tools(client).call({ Tools().Headers().get() }) {
 
 The endpoint call itself moves inside the parentheses here — Kotlin's trailing-lambda syntax always
 binds to the *last* parameter, which is the request customization, not the call.
+
+=== Streaming a response
+
+A ktor response is only readable while it is open, and `call` reads the whole body before returning
+— so an endpoint whose answer you want to consume as a stream needs a scope to consume it in.
+`callStreaming` is that scope: it hands your block a *function* that performs the call, and keeps
+the response open for as long as the block runs.
+
+.main.kt
+[source,kotlin]
+----
+articles.callStreaming({ Article(id).get() }) { get ->
+    get().mapValue { it.content }
+}
+----
+
+Whatever the block returns is the call's result, so it can narrow or transform the answer as it
+consumes it — the `CallStatus` here carries the mapped `String`, not the whole `ArticleContent`.
+The endpoint call moves inside the parentheses for the same reason as above: the trailing lambda
+binds to the handler, and a per-call request customization sits between the two when one is needed:
+
+.main.kt
+[source,kotlin]
+----
+articles.callStreaming(
+    { Article(id).get() },
+    buildRequest = { headers { append("X-Nomi-Demo", "Yay!") } },
+) { get ->
+    get().mapValue { it.content }
+}
+----
+
+Failures fold exactly as they do for `call`. A business failure still reaches the handler — `get()`
+answers the failing `Either`, and the handler decides what to do with it — while a transport error
+or an unexpected status never gets that far and becomes a `NetworkFailure` or a `ServerFailure`
+(see <<callstatus,`CallStatus`>>).
 
 === `CallStatus`
 

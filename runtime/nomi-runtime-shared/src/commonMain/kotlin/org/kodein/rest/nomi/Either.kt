@@ -2,6 +2,7 @@
 
 package org.kodein.rest.nomi
 
+import org.kodein.rest.nomi.Either
 import org.kodein.rest.nomi.Either.Companion.error
 import org.kodein.rest.nomi.Either.Companion.value
 import kotlin.jvm.JvmInline
@@ -69,8 +70,9 @@ public value class Either<out V, out E : Error> private constructor(
     public companion object {
         /** An `Either` holding the successful [value]. */
         public fun <V, E : Error> value(value: V): Either<V, E> = Either(value)
+        private val UnitValue: Either<Unit, Error> = Either(Unit)
         /** An `Either` holding `Unit`: `value(Unit)`, for the endpoints that return nothing. */
-        public fun <E : Error> unit(): Either<Unit, E> = Either(Unit)
+        @Suppress("UNCHECKED_CAST") public fun <E : Error> unit(): Either<Unit, E> = UnitValue as Either<Unit, E>
         /** An `Either` holding the business failure [error], answered to the client as a `422`. */
         public fun <V, E : Error> error(error: E): Either<V, E> = Either(error)
     }

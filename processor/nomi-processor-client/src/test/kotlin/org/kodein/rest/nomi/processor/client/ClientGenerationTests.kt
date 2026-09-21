@@ -145,4 +145,43 @@ class ClientGenerationTests {
         assertTrue(generated.contains(": Derived,"), generated)
         assertTrue(generated.contains("override suspend fun Res.`get`"), generated)
     }
+
+    @Test
+    fun `the generated impl carries everything NomiClientEndpointService declares`() {
+        // The ServiceCaller hands its factory a per-call request customization and a streaming
+        // handler; the impl must take and override both, or `::Impl` stops conforming to the
+        // factory type. Asserted here rather than only in the golden, so a change to
+        // NomiClientEndpointService fails with a message that names what is missing.
+        val result = compile(
+            SourceFile.kotlin(
+                "endpoints.kt",
+                """
+                package test
+                import org.kodein.rest.nomi.Endpoint
+                import org.kodein.rest.nomi.EndpointService
+                import org.kodein.rest.nomi.Either
+                import org.kodein.rest.nomi.NoFail
+                import org.kodein.rest.nomi.client.ClientEndpointServiceFactory
+
+                @Endpoint.Resource
+                interface Res
+
+                @Endpoint.Service
+                interface Svc : EndpointService {
+                    suspend fun Res.`get`(): Either<Unit, NoFail>
+                }
+
+                @ClientEndpointServiceFactory(Svc::class, "svc")
+                object Factories
+                """,
+            ),
+        )
+        assertEquals(KotlinCompilation.ExitCode.OK, result.exitCode, result.errors().joinToString("\n"))
+        val generated = result.generated("NomiFactoriesSvcClient.kt")
+        assertTrue(generated.contains("override val buildRequest: ServiceCaller.KtorRequestBuilder?"), generated)
+        assertTrue(
+            generated.contains("override val streamingHandler: ServiceCaller.StreamingResponseHandler<*, *, *>?"),
+            generated,
+        )
+    }
 }

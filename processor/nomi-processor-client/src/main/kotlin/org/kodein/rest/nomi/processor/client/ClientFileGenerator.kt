@@ -12,6 +12,7 @@ import com.squareup.kotlinpoet.LambdaTypeName
 import com.squareup.kotlinpoet.MemberName
 import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
 import com.squareup.kotlinpoet.PropertySpec
+import com.squareup.kotlinpoet.STAR
 import com.squareup.kotlinpoet.TypeSpec
 import com.squareup.kotlinpoet.UNIT
 import com.squareup.kotlinpoet.ksp.toClassName
@@ -51,7 +52,13 @@ private val APPEND_ENDPOINT_FILE = MemberName("org.kodein.rest.nomi.client", "ap
 private val APPEND_ENDPOINT_ITEM = MemberName("org.kodein.rest.nomi.client", "appendEndpointItem")
 private val ENDPOINT_BINARY = ClassName("org.kodein.rest.nomi", "EndpointBinary")
 private val SET_ENDPOINT_BINARY_BODY = MemberName("org.kodein.rest.nomi.client", "setEndpointBinaryBody")
-private val BUILD_REQUEST_TYPE = LambdaTypeName.get(receiver = HTTP_REQUEST_BUILDER, returnType = UNIT)
+// The runtime's own nested typealiases, so the generated impl tracks NomiClientEndpointService
+// rather than restating its shape - both nullable, since a plain `call` supplies neither.
+private val KTOR_REQUEST_BUILDER =
+    ClassName("org.kodein.rest.nomi.client", "ServiceCaller", "KtorRequestBuilder").copy(nullable = true)
+private val STREAMING_RESPONSE_HANDLER =
+    ClassName("org.kodein.rest.nomi.client", "ServiceCaller", "StreamingResponseHandler")
+        .parameterizedBy(STAR, STAR, STAR).copy(nullable = true)
 
 private fun httpMethodMember(method: HttpMethod): MemberName = MemberName(HTTP_METHOD_COMPANION, method.name)
 
@@ -99,7 +106,8 @@ public class ClientFileGenerator(private val codeGenerator: CodeGenerator) {
     private fun buildImplType(implSimpleName: String, serviceClassName: ClassName, service: AnalyzedService): TypeSpec {
         val constructor = FunSpec.constructorBuilder()
             .addParameter("client", HTTP_CLIENT)
-            .addParameter("buildRequest", BUILD_REQUEST_TYPE)
+            .addParameter("buildRequest", KTOR_REQUEST_BUILDER)
+            .addParameter("streamingHandler", STREAMING_RESPONSE_HANDLER)
             .build()
 
         return TypeSpec.classBuilder(implSimpleName)
@@ -110,9 +118,15 @@ public class ClientFileGenerator(private val codeGenerator: CodeGenerator) {
             .primaryConstructor(constructor)
             .addProperty(PropertySpec.builder("client", HTTP_CLIENT).initializer("client").build())
             .addProperty(
-                PropertySpec.builder("buildRequest", BUILD_REQUEST_TYPE)
+                PropertySpec.builder("buildRequest", KTOR_REQUEST_BUILDER)
                     .addModifiers(KModifier.OVERRIDE)
                     .initializer("buildRequest")
+                    .build(),
+            )
+            .addProperty(
+                PropertySpec.builder("streamingHandler", STREAMING_RESPONSE_HANDLER)
+                    .addModifiers(KModifier.OVERRIDE)
+                    .initializer("streamingHandler")
                     .build(),
             )
             .apply { service.endpoints.forEach { addFunction(buildEndpointFun(it)) } }

@@ -21,7 +21,8 @@ import kotlin.test.assertTrue
 
 @OptIn(InternalNomiAPI::class)
 private class AppendPartFakeService : NomiClientEndpointService {
-    override val buildRequest: HttpRequestBuilder.() -> Unit = {}
+    override val buildRequest: ServiceCaller.KtorRequestBuilder? = null
+    override val streamingHandler: ServiceCaller.StreamingResponseHandler<*, *, *>? = null
 }
 
 /**

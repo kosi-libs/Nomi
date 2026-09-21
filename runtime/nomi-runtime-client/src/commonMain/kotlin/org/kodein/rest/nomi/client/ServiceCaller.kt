@@ -9,9 +9,10 @@ import org.kodein.rest.nomi.EndpointService
 import org.kodein.rest.nomi.Error
 import org.kodein.rest.nomi.InternalNomiAPI
 import org.kodein.rest.nomi.NType
-import org.kodein.rest.nomi.client.call
+import org.kodein.rest.nomi.client.ServiceCaller.KtorRequestBuilder
+import org.kodein.rest.nomi.client.ServiceCaller.StreamingResponseHandler
 import org.kodein.rest.nomi.on
-import org.kodein.rest.nomi.onValue
+import kotlin.coroutines.SuspendFunction1
 
 
 /**
@@ -22,6 +23,21 @@ import org.kodein.rest.nomi.onValue
  * exists for the generated implementation's sake.
  */
 public interface ServiceCaller<T : EndpointService> {
+    
+    /** A per-call customization of the outgoing request - headers, authentication, anything
+     * ktor's `HttpRequestBuilder` exposes. `null` where a call adds none. */
+    public typealias KtorRequestBuilder = suspend HttpRequestBuilder.() -> Unit
+
+    /**
+     * Consumes a response while it is still open, turning the endpoint's [S] into whatever [R] the
+     * caller wants to keep.
+     *
+     * It receives the call as a *function* rather than as a value: invoking it performs the request
+     * and reads the response, and the response stays readable for as long as this handler runs.
+     * Whatever it returns becomes the call's result. See [callStreaming].
+     */
+    public typealias StreamingResponseHandler<S, R, F> = suspend (suspend () -> Either<S, F>) -> Either<R, F>
+    
     /**
      * Runs [call] on the service and folds its answer into a [CallStatus.Result].
      *
@@ -32,31 +48,103 @@ public interface ServiceCaller<T : EndpointService> {
     public suspend fun <S, F : Error> call(
         successType: NType<S>,
         failureType: NType<F>,
-        buildRequest: (HttpRequestBuilder.() -> Unit)? = null,
+        buildRequest: KtorRequestBuilder? = null,
         call: suspend T.() -> Either<S, F>
     ): CallStatus.Result<S, F>
+
+    /**
+     * Runs [call] with its response held open for [streamResponse], and folds what that handler
+     * returns into a [CallStatus.Result].
+     *
+     * [resultType] and [failureType] are what the reified extension captures - note the result is
+     * typed by the handler's [R], not by the endpoint's own success type. Use the reified
+     * [callStreaming] extension rather than this member, which exists for the generated
+     * implementation's sake.
+     */
+    public suspend fun <S, R, F : Error> callStreaming(
+        resultType: NType<R>,
+        failureType: NType<F>,
+        call: suspend T.() -> Either<S, F>,
+        buildRequest: KtorRequestBuilder? = null,
+        streamResponse: StreamingResponseHandler<S, R, F>,
+    ): CallStatus.Result<R, F>
 }
 
+/**
+ * The [ServiceCaller] a `@ClientEndpointServiceFactory`-generated function returns.
+ *
+ * [service] is the generated implementation's constructor: it takes the client, the per-call
+ * request customization, and the streaming handler - the last two `null` for a plain [call], which
+ * is why one service instance can be built once and reused for every uncustomized call.
+ */
 @InternalNomiAPI
 public class NomiServiceCaller<T : EndpointService>(
     private val client: HttpClient,
-    private val service: (HttpClient, HttpRequestBuilder.() -> Unit) -> T
+    private val service: (HttpClient, KtorRequestBuilder?, StreamingResponseHandler<*, *, *>?) -> T
 ) : ServiceCaller<T> {
 
-    private val standardCallService = service(client, {})
+    // One service instance serves every plain, uncustomized call: with no buildRequest and no
+    // streaming handler there is nothing per-call to carry, so there is nothing to rebuild.
+    private val standardCallService = service(client, null, null)
 
     override suspend fun <S, F : Error> call(
         successType: NType<S>,
         failureType: NType<F>,
-        buildRequest: (HttpRequestBuilder.() -> Unit)?,
+        buildRequest: KtorRequestBuilder?,
         call: suspend T.() -> Either<S, F>
     ): CallStatus.Result<S, F> {
 
         try {
-            val service = if (buildRequest != null) service(client, buildRequest) else standardCallService
+            // A per-call customization has to be carried by the service instance itself, because
+            // that is where the generated endpoint methods read it from (NomiClientEndpointService).
+            val service =
+                if (buildRequest != null) {
+                    service(client, buildRequest, null)
+                } else standardCallService
+            // Either is a value class over one `content: Any?` - it carries no runtime type of its
+            // own, so which branch it holds is decided by the NTypes the caller captured, not by
+            // the static type parameters here.
             return service.call()
                 .on(
                     valueType = successType,
+                    errorType = failureType,
+                    value = { CallStatus.Success(it) },
+                    error = { CallStatus.CallFailure(it) }
+                )
+        // Only these two escape an endpoint call; everything else is a genuine bug and propagates.
+        } catch (e: EndpointStatusCodeException) {
+            return CallStatus.ServerFailure(e.code, e.body)
+        } catch (e: EndpointNetworkException) {
+            return CallStatus.NetworkFailure(e.message ?: "", e.cause)
+        }
+    }
+
+    override suspend fun <S, R, F : Error> callStreaming(
+        resultType: NType<R>,
+        failureType: NType<F>,
+        call: suspend T.() -> Either<S, F>,
+        buildRequest: KtorRequestBuilder?,
+        streamResponse: StreamingResponseHandler<S, R, F>,
+    ): CallStatus.Result<R, F> {
+        try {
+            // Cast 1, widening. NomiClientEndpointService is not generic, so it can only hold the
+            // handler star-projected. A function type is contravariant in its parameter, so
+            // <S, R, F> is not a subtype of <*, *, *> and the compiler cannot see this as safe -
+            // but nothing ever reads the field back except HttpClient.call, which narrows it again
+            // to the very S and F this call was built with (cast 3 there).
+            val service = service(client, buildRequest, @Suppress("UNCHECKED_CAST") (streamResponse as StreamingResponseHandler<*, *, *>))
+            // Cast 2, the other end of the laundering. `call` is declared to answer Either<S, F> -
+            // the endpoint's own success type - but with a handler installed, what HttpClient.call
+            // actually returns is whatever the handler returned, an Either<R, F>. That is a
+            // relabelling rather than a conversion: Either is a value class wrapping one Any?, so
+            // the two types share a runtime representation and nothing is reinterpreted.
+            //
+            // What makes it correct rather than merely legal is the next line: the value is
+            // discriminated with `resultType`, R's NType, so the runtime check matches what the
+            // handler actually put in there.
+            return (@Suppress("UNCHECKED_CAST") (service.call() as Either<R, F>))
+                .on(
+                    valueType = resultType,
                     errorType = failureType,
                     value = { CallStatus.Success(it) },
                     error = { CallStatus.CallFailure(it) }
@@ -78,14 +166,14 @@ public class NomiServiceCaller<T : EndpointService>(
  * inside the parentheses here: `caller.call({ Tools().Headers().get() }) { headers { ... } }`.
  */
 public suspend inline fun <T : EndpointService, reified S, reified F : Error> ServiceCaller<T>.call(
-    crossinline call: suspend T.() -> Either<S, F>,
-    crossinline buildRequest: HttpRequestBuilder.() -> Unit,
+    noinline call: suspend T.() -> Either<S, F>,
+    noinline buildRequest: KtorRequestBuilder,
 ): CallStatus.Result<S, F> =
     call(
         successType = NType<S>(),
         failureType = NType<F>(),
-        buildRequest = { buildRequest() },
-        call = { call() }
+        buildRequest = buildRequest,
+        call = call
     )
 
 /**
@@ -95,21 +183,55 @@ public suspend inline fun <T : EndpointService, reified S, reified F : Error> Se
  * in scope directly: `caller.call { Articles().get(page = 1) }`.
  */
 public suspend inline fun <T : EndpointService, reified S, reified F : Error> ServiceCaller<T>.call(
-    crossinline call: suspend T.() -> Either<S, F>
+    noinline call: suspend T.() -> Either<S, F>
 ): CallStatus.Result<S, F> =
     call(
         successType = NType<S>(),
         failureType = NType<F>(),
         buildRequest = null,
-        call = { call() }
+        call = call
     )
+
+/**
+ * Runs one endpoint [call] and consumes its response *while it is still open*.
+ *
+ * A plain [call] reads the whole response before returning, so an answer you mean to consume as a
+ * stream has nowhere to be read. [streamResponse] is that scope: it is handed a function that
+ * performs the call, and may read the response for as long as it runs. Whatever it returns is the
+ * call's result, so it can narrow or transform the answer as it consumes it:
+ *
+ * ```kotlin
+ * articles.callStreaming({ Article(id).get() }) { get ->
+ *     get().mapValue { it.content }
+ * }
+ * ```
+ *
+ * Kotlin's trailing-lambda syntax binds to the *last* parameter, so the endpoint call moves inside
+ * the parentheses - the trailing lambda here is the handler, and [buildRequest] sits between them
+ * when a call needs one. A failure folds exactly as it does for [call]: the handler still runs and
+ * sees the failing `Either`, while a transport or status-code failure never reaches it and becomes
+ * a [CallStatus.NetworkFailure] or [CallStatus.ServerFailure].
+ */
+public suspend inline fun <T : EndpointService, S, reified R, reified F : Error> ServiceCaller<T>.callStreaming(
+    noinline call: suspend T.() -> Either<S, F>,
+    noinline buildRequest: KtorRequestBuilder? = null,
+    noinline streamResponse: StreamingResponseHandler<S, R, F>,
+): CallStatus.Result<R, F> =
+    callStreaming(
+        resultType = NType<R>(),
+        failureType = NType<F>(),
+        buildRequest = buildRequest,
+        streamResponse = streamResponse,
+        call = call,
+    )
+
 
 /** [flow] with the same per-call [buildRequest] customization the two-block [call] takes. */
 public inline fun <T : EndpointService, reified S, reified F : Error> ServiceCaller<T>.flow(
-    crossinline call: suspend T.() -> Either<S, F>,
-    crossinline buildRequest: HttpRequestBuilder.() -> Unit,
+    noinline call: suspend T.() -> Either<S, F>,
+    noinline buildRequest: KtorRequestBuilder,
 ): Flow<CallStatus<S, F>> =
-    callFlow { call({ call() }) { buildRequest() } }
+    callFlow { call(call, buildRequest) }
 
 /**
  * [call] as a cold [callFlow]: collecting it emits [CallStatus.Loading], runs the call, then emits
@@ -118,7 +240,7 @@ public inline fun <T : EndpointService, reified S, reified F : Error> ServiceCal
  * Nothing runs until the flow is collected, and every collection calls again.
  */
 public inline fun <T : EndpointService, reified S, reified F : Error> ServiceCaller<T>.flow(
-    crossinline call: suspend T.() -> Either<S, F>,
+    noinline call: suspend T.() -> Either<S, F>,
 ): Flow<CallStatus<S, F>> =
-    callFlow { call { call() } }
+    callFlow { call(call) }
 

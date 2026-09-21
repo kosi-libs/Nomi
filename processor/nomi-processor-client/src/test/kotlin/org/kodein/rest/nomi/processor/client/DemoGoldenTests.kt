@@ -102,7 +102,6 @@ class DemoGoldenTests {
             package org.kodein.rest.nomi.demo.client
 
             import io.ktor.client.HttpClient
-            import io.ktor.client.request.HttpRequestBuilder
             import io.ktor.client.request.setBody
             import io.ktor.http.HttpMethod.Companion.Delete
             import io.ktor.http.HttpMethod.Companion.Get
@@ -132,7 +131,8 @@ class DemoGoldenTests {
             @OptIn(InternalNomiAPI::class)
             private class NomiAPIServicesArticlesServiceClient(
               public val client: HttpClient,
-              override val buildRequest: HttpRequestBuilder.() -> Unit,
+              override val buildRequest: ServiceCaller.KtorRequestBuilder?,
+              override val streamingHandler: ServiceCaller.StreamingResponseHandler<*, *, *>?,
             ) : ArticlesService,
                 NomiClientEndpointService {
               override suspend fun Articles.`get`(page: Int?): Either<List<String>?, NoFail> = client.call(

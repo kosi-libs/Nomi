@@ -615,6 +615,10 @@ Two more runtime functions, also under `@InternalNomiAPI`:
 For each `@ClientEndpointServiceFactory` annotated object, the client processor generates, in the same package:
 
 * A private implementation of the service interface that also implements `NomiClientEndpointService`.
+  Its constructor is exactly what ``NomiServiceCaller``'s factory calls: the `HttpClient`, the per-call request
+  customization, and the streaming response handler — the last two nullable, since a plain `call` supplies neither.
+  Both are `override val`s, and `HttpClient.call` reads them back off the service; a streaming handler is what makes
+  it keep the response open inside ktor's `execute { }` rather than reading it eagerly.
 * A public extension function on the annotated object, named after the annotation's `name` argument,
   that creates a `ServiceCaller` for the service interface.
 
@@ -623,7 +627,8 @@ For each `@ClientEndpointServiceFactory` annotated object, the client processor 
 @OptIn(InternalNomiAPI::class)
 private class NomiAPIServicesUsersServiceClient(
     val client: HttpClient,
-    override val buildRequest: HttpRequestBuilder.() -> Unit
+    override val buildRequest: ServiceCaller.KtorRequestBuilder?,
+    override val streamingHandler: ServiceCaller.StreamingResponseHandler<*, *, *>?,
 ) : UsersService, NomiClientEndpointService {
     override suspend fun Users.get(page: Int?): Either<List<UserSummary>, NoFail> =
         client.call(

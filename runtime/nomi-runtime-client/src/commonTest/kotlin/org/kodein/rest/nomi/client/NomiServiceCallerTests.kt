@@ -30,7 +30,8 @@ private class FakeEndpointService(
     val client: HttpClient,
     // Named differently from the ServiceCaller.call parameter it's constructed from, purely to
     // keep "the factory argument" and "the field storing it" visually distinct below.
-    val applyBuildRequest: HttpRequestBuilder.() -> Unit,
+    val applyBuildRequest: ServiceCaller.KtorRequestBuilder?,
+    val streamResponse: ServiceCaller.StreamingResponseHandler<*, *, *>?,
 ) : EndpointService
 
 private fun dummyClient(): HttpClient = HttpClient(MockEngine { error("the engine should not be reached by this test") })
@@ -44,7 +45,8 @@ private data class EndToEndFail(val reason: String) : Error
 @OptIn(InternalNomiAPI::class)
 private class EndToEndService(
     private val client: HttpClient,
-    override val buildRequest: HttpRequestBuilder.() -> Unit,
+    override val buildRequest: ServiceCaller.KtorRequestBuilder?,
+    override val streamingHandler: ServiceCaller.StreamingResponseHandler<*, *, *>?,
 ) : NomiClientEndpointService {
     suspend fun get(): Either<Payload, EndToEndFail> = client.call(listOf("thing"), HttpMethod.Get)
 }
@@ -105,8 +107,8 @@ class NomiServiceCallerTests {
     fun `a buildRequest passed to call is applied to the constructed service`() = runTest {
         val applied = mutableListOf<String>()
         lateinit var createdService: FakeEndpointService
-        val caller = NomiServiceCaller(client = dummyClient()) { client, buildRequest ->
-            FakeEndpointService(client, buildRequest).also { createdService = it }
+        val caller = NomiServiceCaller(client = dummyClient()) { client, buildRequest, streamResponse ->
+            FakeEndpointService(client, buildRequest, streamResponse).also { createdService = it }
         }
 
         caller.call(NType<Unit>(), NType<CallerTestFail>(), buildRequest = { applied.add("applied") }) {
@@ -114,7 +116,7 @@ class NomiServiceCallerTests {
         }
 
         // The service is constructed with the call's own buildRequest.
-        createdService.applyBuildRequest(HttpRequestBuilder())
+        createdService.applyBuildRequest!!(HttpRequestBuilder())
         assertEquals(listOf("applied"), applied)
     }
 

@@ -48,7 +48,8 @@ private data class CallTestFail(val reason: String) : Error
 // not once that function is itself made `inline`/`reified` to forward S and F generically.
 @OptIn(InternalNomiAPI::class)
 private class FakeService(
-    override val buildRequest: HttpRequestBuilder.() -> Unit = {},
+    override val buildRequest: ServiceCaller.KtorRequestBuilder? = null,
+    override val streamingHandler: ServiceCaller.StreamingResponseHandler<*, *, *>? = null,
 ) : NomiClientEndpointService {
     suspend fun getValue(
         client: HttpClient,

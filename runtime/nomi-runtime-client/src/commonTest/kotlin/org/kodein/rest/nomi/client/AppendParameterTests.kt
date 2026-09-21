@@ -10,7 +10,8 @@ import kotlin.test.assertTrue
 
 @OptIn(InternalNomiAPI::class)
 private class AppendParamFakeService : NomiClientEndpointService {
-    override val buildRequest: HttpRequestBuilder.() -> Unit = {}
+    override val buildRequest: ServiceCaller.KtorRequestBuilder? = null
+    override val streamingHandler: ServiceCaller.StreamingResponseHandler<*, *, *>? = null
 }
 
 private object ReservedCharStringer : Stringer<String> {
