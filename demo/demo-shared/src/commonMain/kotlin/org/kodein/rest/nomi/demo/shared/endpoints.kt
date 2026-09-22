@@ -26,13 +26,22 @@ sealed interface Article {
 @Endpoint.Service
 interface ArticlesService : EndpointService {
 
+    /**
+     * Lists the articles, newest first.
+     *
+     * Answers `204` past the last page rather than an empty list, so a caller can tell "no more" from
+     * "none match".
+     */
     suspend fun Articles.get(@Endpoint.Query page: Int? = null): Either<List<ArticleSummary>?, NoFail>
 
+    /** Creates an article and answers its identifier. */
     @Endpoint(Endpoint.Method.Post)
     suspend fun Articles.New.create(content: ArticleContent): Either<Uuid, ArticleCreationFailure>
 
+    /** Reads one article in full. */
     suspend fun Article.get(): Either<ArticleContent, NoFail>
 
+    /** Deletes one article. Deleting one that is already gone is not an error. */
     suspend fun Article.delete(): Either<Unit, NoFail>
 
     suspend fun Article.Comments.get(@Endpoint.Query page: Int? = null): Either<List<ArticleComment>?, NoFail>

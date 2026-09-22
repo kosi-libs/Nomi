@@ -584,6 +584,62 @@ An endpoint *returning* an `EndpointBinary` is emitted with `respondEndpointBina
 
 `respondEndpointBinary` is a sibling of `respond` rather than a branch inside it: `respond` hands its success to
 `ContentNegotiation`, which is exactly what raw bytes must not go through.
+
+==== OpenAPI
+
+`@ServerEndpointService(withOpenApiSpecs = true)` chains ``ktor``'s `Route.describe { }` onto each method block,
+and `Route.hide()` onto one whose override carries `@ServerEndpointService.HideFromOpenApi`.
+The generated function then opts in to `@ExperimentalKtorApi`; a service that did not ask does not, and emits no
+`describe` at all.
+
+[source,kotlin]
+----
+`get` {
+  call.respond(service) { … }
+}.describe {
+  summary = "Lists the articles, newest first."
+  operationId = "ServerArticlesService_Articles_get"
+  parameters {
+    query("page") {
+      required = false
+      schema = JsonSchema(type = JsonType.INTEGER)
+    }
+  }
+  responses {
+    HttpStatusCode.OK {
+      schema = jsonSchema<List<ArticleSummary>>()
+    }
+    HttpStatusCode.NoContent {
+      description = "Success, with no content."
+    }
+    HttpStatusCode.BadRequest {
+      description = "A path or query parameter was missing or could not be decoded."
+    }
+  }
+}
+----
+
+What is emitted, and from which model field:
+
+* `summary`/`description` from `KSDeclaration.docString` - the interface's, falling back to the override's. Both are
+  omitted when there is none, since an empty summary reads as documented-but-blank.
+* `operationId` from the implementation's simple name, the resource chain, and the endpoint name. The chain is part
+  of it because two resources of one service may each declare a `get`; where even that collides - two same-named
+  endpoints on one resource under different methods - the method breaks the tie.
+* `parameters` from `resource.allParams` (always `required`) and `endpoint.queries` (`required = !optional`).
+  Their schemas describe the *wire*: `integer` for the `Int` and `Long` builtins, `string` for everything else,
+  including `Boolean`, whose builtin `Stringer` encodes `"1"`/`"0"`.
+* `requestBody` from `payload`: `application/json` with ``jsonSchema<T>()`` for a `BodyParam`,
+  `application/octet-stream` with `format: binary` for a `BinaryParam`, and for a `MultipartParam` a
+  `multipart/form-data` object schema - one property per part, `format: binary` for a file part, an array when the
+  part repeats, `required` from `PartPresence` - plus an `encoding` entry per part.
+* `responses` mirroring the wire protocol: `200`, or `204` for a `Unit` success, or both for a nullable one; `422`
+  unless the error type is `NoFail`; `400` when the endpoint has any parameter to decode.
+
+A value part's `encoding` entry names its ``Stringer``'s own content type. The processor never learns what that is -
+it is a property with a default body - but it does not need to: `describe { }` is runtime code and a `Stringer` is an
+object, so the generator emits `Encoding(contentType = TheStringer.contentType)` and the value resolves when the
+route is built.
 The close cannot be generated here the way it is for a received body, because the binary does not exist until the
 block has run - so the runtime closes it, and does so from *inside* ktor's content writer rather than around
 `respond`, which returns as soon as the content is handed to the pipeline and before a single byte is written.
@@ -845,6 +901,16 @@ sending nothing.
   ahead of `property` — so the annotation arrives as a `KSValueParameter` whose parent is a constructor, not as a
   `KSPropertyDeclaration`. `StrayAnnotationChecks` must accept that position, or users are forced to write
   `@property:Endpoint.Stringed(…)`.
+* *``jsonSchema<T>()`` takes `T : Any`, so a nullable type argument does not compile.* A nullable success is
+  emitted as its non-null type under `200`, which is also more accurate: the nullability is what the separate `204`
+  already says.
+* *KDoc does not survive into class files.* An `@Endpoint.Service` declared in another module - the usual
+  arrangement, since the client shares it - has no `docString` left by the time the server processor runs. That is
+  why summaries fall back to the override's own KDoc, which is always in the module being processed.
+* *An OpenAPI `operationId` must be unique across the whole document*, and `(path, method)` uniqueness does not give
+  that: two resources of one service may each declare a `get`. The resource chain is part of the id for this reason.
+* *``describe``/``hide`` are `@ExperimentalKtorApi`.* Generated code carries the opt-in, and a minor ktor release may
+  change the DSL under it.
 * *A streamed response's close belongs inside the content writer, not around `respond`.* `call.respond(content)`
   returns once the `OutgoingContent` is handed to the pipeline; ktor invokes the writer afterwards. Closing the
   binary around the `respond` call therefore spends it before a byte goes out, and the response arrives empty - with

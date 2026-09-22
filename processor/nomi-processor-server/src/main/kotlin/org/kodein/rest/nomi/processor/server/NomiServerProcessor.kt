@@ -4,12 +4,16 @@ import com.google.devtools.ksp.processing.CodeGenerator
 import com.google.devtools.ksp.processing.KSPLogger
 import com.google.devtools.ksp.processing.Resolver
 import com.google.devtools.ksp.processing.SymbolProcessor
+import com.google.devtools.ksp.getDeclaredFunctions
 import com.google.devtools.ksp.symbol.KSAnnotated
 import com.google.devtools.ksp.symbol.KSClassDeclaration
+import com.google.devtools.ksp.symbol.KSFunctionDeclaration
 import com.google.devtools.ksp.validate
 import org.kodein.rest.nomi.processor.common.LoggingReporter
 import org.kodein.rest.nomi.processor.common.Reporter
 import org.kodein.rest.nomi.processor.common.general.StrayAnnotationChecks
+import org.kodein.rest.nomi.processor.common.ksp.annotationNamed
+import org.kodein.rest.nomi.processor.common.ksp.fq
 import org.kodein.rest.nomi.processor.common.ksp.visibilityOrNull
 import org.kodein.rest.nomi.processor.common.service.AnalyzedEndpoint
 import org.kodein.rest.nomi.processor.common.service.ServiceAnalyzer
@@ -76,6 +80,65 @@ public class NomiServerProcessor(
 
         if (!ServiceChecks.checkRouteCollisions(declaration, endpoints, reporter)) return null
 
-        return AnalyzedServerService(declaration, declaration.visibilityOrNull(), result.routeName, endpoints)
+        val overrides = overrideMap(declaration, endpoints)
+        if (!checkHideMarkers(declaration, result, overrides, reporter)) return null
+
+        return AnalyzedServerService(
+            declaration,
+            declaration.visibilityOrNull(),
+            result.routeName,
+            endpoints,
+            result.withOpenApiSpecs,
+            overrides,
+        )
+    }
+
+    /**
+     * Each endpoint's interface declaration to the function implementing it.
+     *
+     * `@ServerEndpointService.HideFromOpenApi` sits on the override, while an [AnalyzedEndpoint] holds
+     * the interface's declaration, so the two have to be related. `findOverridee` answers the *closest*
+     * overridden declaration, which for an endpoint reached through an intermediate service interface
+     * is not yet the one that declared it - hence the walk to the top. `getAllFunctions` rather than
+     * the declared ones, so an endpoint implemented by a base class is found too.
+     */
+    private fun overrideMap(
+        impl: KSClassDeclaration,
+        endpoints: List<AnalyzedEndpoint>,
+    ): Map<KSFunctionDeclaration, KSFunctionDeclaration> {
+        val byDeclaration = mutableMapOf<KSFunctionDeclaration, KSFunctionDeclaration>()
+        for (function in impl.getAllFunctions()) {
+            var root = function
+            while (true) root = root.findOverridee() as? KSFunctionDeclaration ?: break
+            if (root != function) byDeclaration.putIfAbsent(root, function)
+        }
+        return endpoints.mapNotNull { endpoint ->
+            byDeclaration[endpoint.declaration]?.let { endpoint.declaration to it }
+        }.toMap()
+    }
+
+    // A marker that reaches no endpoint would silently do nothing, which is the worst way for a
+    // documentation switch to fail: the document simply comes out with an endpoint the author meant
+    // to hide. Both misuses are reported instead.
+    private fun checkHideMarkers(
+        impl: KSClassDeclaration,
+        result: ServerServiceCheckResult,
+        overrides: Map<KSFunctionDeclaration, KSFunctionDeclaration>,
+        reporter: Reporter,
+    ): Boolean {
+        val implementing = overrides.values.toSet()
+        var ok = true
+        for (function in impl.getDeclaredFunctions()) {
+            if (function.annotationNamed(HIDE_FROM_OPEN_API_FQ) == null) continue
+            val name = function.simpleName.asString()
+            if (function !in implementing) {
+                reporter.error(function, NomiServerErrors.hideFromOpenApiOnNonEndpoint(impl.fq(), name))
+                ok = false
+            } else if (!result.withOpenApiSpecs) {
+                reporter.error(function, NomiServerErrors.hideFromOpenApiWithoutSpecs(impl.fq(), name))
+                ok = false
+            }
+        }
+        return ok
     }
 }

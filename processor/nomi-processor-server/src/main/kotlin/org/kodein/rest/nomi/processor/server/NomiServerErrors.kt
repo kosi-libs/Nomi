@@ -27,4 +27,12 @@ public object NomiServerErrors {
 
     public fun routeNameIsHardKeyword(name: String, routeName: String): String =
         "@ServerEndpointService '$name': routeName '$routeName' must not be a Kotlin hard keyword"
+
+    public fun hideFromOpenApiOnNonEndpoint(name: String, function: String): String =
+        "@ServerEndpointService.HideFromOpenApi on '$name.$function', which does not override an endpoint - " +
+            "it goes on the override of the endpoint to leave out of the OpenAPI document"
+
+    public fun hideFromOpenApiWithoutSpecs(name: String, function: String): String =
+        "@ServerEndpointService.HideFromOpenApi on '$name.$function', but '$name' does not set withOpenApiSpecs - " +
+            "there is no OpenAPI document to hide it from"
 }

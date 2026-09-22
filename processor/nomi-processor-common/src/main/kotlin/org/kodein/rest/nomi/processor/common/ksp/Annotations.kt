@@ -41,6 +41,8 @@ public fun KSAnnotation.argument(name: String): KSValueArgument? = arguments.fir
 
 public fun KSAnnotation.stringArg(name: String): String? = argument(name)?.value as? String
 
+public fun KSAnnotation.booleanArg(name: String): Boolean? = argument(name)?.value as? Boolean
+
 public fun KSAnnotation.typeArg(name: String): KSType? = argument(name)?.value as? KSType
 
 /** Reads a `KClass<*>`-typed argument, following through a `typealias` to the class it names. */

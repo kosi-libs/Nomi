@@ -13,6 +13,9 @@ dependencies {
     api(projects.runtime.nomiRuntimeShared)
 
     api(libs.ktor.server)
+    // Generated routes call Route.describe/hide when a service opts into OpenAPI, so this has to
+    // reach the consumer's compile classpath. It is already on their runtime one, via ContentNegotiation.
+    api(libs.ktor.server.routingOpenApi)
 
     implementation(libs.kotlinx.coroutines)
 

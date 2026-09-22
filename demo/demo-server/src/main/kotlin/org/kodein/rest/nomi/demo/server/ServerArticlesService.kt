@@ -19,7 +19,7 @@ import org.kodein.rest.nomi.NoFail
 import kotlin.uuid.Uuid
 
 
-@ServerEndpointService("articles")
+@ServerEndpointService("articles", withOpenApiSpecs = true)
 class ServerArticlesService : ArticlesService {
 
     private val articles = arrayListOf(
@@ -48,11 +48,18 @@ class ServerArticlesService : ArticlesService {
         )
     )
 
+    /**
+     * Lists the articles, newest first.
+     *
+     * Answers 204 past the last page rather than an empty list, so a caller can tell "no more" from
+     * "none match".
+     */
     override suspend fun Articles.get(page: Int?): Either<List<ArticleSummary>?, NoFail> {
         if (page != null && page != 0) return value(null)
         return value(articles.map { (id, content) -> ArticleSummary(id, content.title, content.author) })
     }
 
+    /** Creates an article and answers its identifier. */
     override suspend fun Articles.New.create(content: ArticleContent): Either<Uuid, ArticleCreationFailure> {
         if (content.title.isBlank()) return error(ArticleCreationFailure.InvalidTitle)
         if (content.author.isBlank()) return error(ArticleCreationFailure.InvalidAuthor)
@@ -66,22 +73,26 @@ class ServerArticlesService : ArticlesService {
         articles.firstOrNull { (articleId) -> articleId == id }
             ?: httpError(HttpStatusCode.NotFound)
 
+    /** Reads one article in full. */
     override suspend fun Article.get(): Either<ArticleContent, NoFail> {
         val (_, article) = getArticle(articleId)
         return value(article)
     }
 
+    /** Deletes one article. Deleting one that is already gone is not an error. */
     override suspend fun Article.delete(): Either<Unit, NoFail> {
         articles.remove(getArticle(articleId))
         return unit()
     }
 
+    /** Lists one article's comments, oldest first. */
     override suspend fun Article.Comments.get(page: Int?): Either<List<ArticleComment>?, NoFail> {
         if (page != null && page != 0) return value(null)
         val (_, _, comments) = getArticle(articleId)
         return value(comments)
     }
 
+    /** Posts a comment on one article. */
     override suspend fun Article.Comments.post(comment: ArticleComment): Either<Unit, ArticleCommentPostFailure> {
         if (comment.author.isBlank()) return error(ArticleCommentPostFailure.InvalidAuthor)
         if (comment.content.isBlank()) return error(ArticleCommentPostFailure.InvalidContent)

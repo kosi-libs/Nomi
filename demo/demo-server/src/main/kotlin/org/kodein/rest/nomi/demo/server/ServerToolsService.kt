@@ -20,14 +20,20 @@ import kotlin.use
 import kotlin.uuid.Uuid
 
 
-@ServerEndpointService("tools")
+@ServerEndpointService("tools", withOpenApiSpecs = true)
 class ServerToolsService : ToolsService {
 
+    /** Echoes the request's own headers, as a debugging aid. */
     override suspend fun Tools.Headers.get(): Either<List<Pair<String, List<String>>>, NoFail> {
         val headers = routingCall().request.headers.entries().map { it.key to it.value }.toList()
         return value(headers)
     }
 
+    /**
+     * Accepts a multipart upload: one file, an optional sender, and one or more articles.
+     *
+     * Each part's content type comes from the Stringer that encodes it.
+     */
     override suspend fun Tools.post(parts: EndpointService.Multipart<ToolsPostData>): Either<Unit, NoFail> {
         // Collect what the parts carry, then act once the whole body has been read. A part's
         // content - a file above all - is only valid inside the handler, so anything that must
@@ -56,6 +62,7 @@ class ServerToolsService : ToolsService {
         return Either.unit()
     }
 
+    /** Answers a raw body, streamed straight to the response channel. */
     override suspend fun Tools.Download.get(): Either<EndpointBinary, NoFail> {
         // The mirror of `put`: the bytes go straight to the response channel, with no serialization
         // and no ContentNegotiation. The size is known here, so it goes out as a Content-Length -
@@ -70,6 +77,7 @@ class ServerToolsService : ToolsService {
         )
     }
 
+    /** Accepts a raw request body, streamed, with no serialization. */
     override suspend fun Tools.put(data: EndpointBinary): Either<Unit, NoFail> {
         // A streamed body is valid only while this endpoint runs, so read it here.
         val content = data.source().use { it.readString() }

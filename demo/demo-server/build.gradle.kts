@@ -16,6 +16,7 @@ dependencies {
     implementation(libs.ktor.server)
     implementation(libs.ktor.server.cio)
     implementation(libs.ktor.server.contentNegotiation)
+    implementation(libs.ktor.server.swagger)
 
     ksp(projects.processor.nomiProcessorServer)
 }

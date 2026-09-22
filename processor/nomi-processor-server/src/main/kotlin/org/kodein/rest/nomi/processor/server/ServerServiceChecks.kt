@@ -7,6 +7,7 @@ import com.google.devtools.ksp.symbol.Modifier
 import org.kodein.rest.nomi.processor.common.Reporter
 import org.kodein.rest.nomi.processor.common.general.GeneralChecks
 import org.kodein.rest.nomi.processor.common.ksp.annotationNamed
+import org.kodein.rest.nomi.processor.common.ksp.booleanArg
 import org.kodein.rest.nomi.processor.common.ksp.fq
 import org.kodein.rest.nomi.processor.common.ksp.isNomiResource
 import org.kodein.rest.nomi.processor.common.ksp.isNomiService
@@ -67,7 +68,11 @@ public object ServerServiceChecks {
         val routeName = checkRouteName(declaration, name, reporter)
         if (routeName == null) ok = false
 
-        return if (ok) ServerServiceCheckResult(routeName!!, services) else null
+        // Defaults to false when absent, which is what the annotation's own default says.
+        val withOpenApiSpecs = declaration.annotationNamed(SERVER_ENDPOINT_SERVICE_FQ)
+            ?.booleanArg("withOpenApiSpecs") ?: false
+
+        return if (ok) ServerServiceCheckResult(routeName!!, withOpenApiSpecs, services) else null
     }
 
     // Mirrors ServiceChecks' own placement rule: never inside a resource; every plain enclosing

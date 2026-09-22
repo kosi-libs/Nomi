@@ -8,9 +8,11 @@ import com.squareup.kotlinpoet.FileSpec
 import com.squareup.kotlinpoet.FunSpec
 import com.squareup.kotlinpoet.KModifier
 import com.squareup.kotlinpoet.MemberName
+import com.google.devtools.ksp.symbol.KSFunctionDeclaration
 import com.squareup.kotlinpoet.ksp.toClassName
 import com.squareup.kotlinpoet.ksp.toKModifier
 import com.squareup.kotlinpoet.ksp.writeTo
+import org.kodein.rest.nomi.processor.common.ksp.annotationNamed
 import org.kodein.rest.nomi.processor.common.multipart.MultipartPart
 import org.kodein.rest.nomi.processor.common.multipart.PartPayload
 import org.kodein.rest.nomi.processor.common.resource.AnalyzedResource
@@ -39,6 +41,9 @@ private val HTTP_ERROR = MemberName("org.kodein.rest.nomi.server", "httpError")
 private val HTTP_STATUS_CODE = ClassName("io.ktor.http", "HttpStatusCode")
 private val PART_PRESENCE = ClassName("org.kodein.rest.nomi", "Endpoint", "MultipartFormData", "PartPresence")
 private val RECEIVE_ENDPOINT_BINARY = MemberName("org.kodein.rest.nomi.server", "receiveEndpointBinary")
+private val DESCRIBE = MemberName("io.ktor.server.routing.openapi", "describe")
+private val HIDE = MemberName("io.ktor.server.routing.openapi", "hide")
+private val EXPERIMENTAL_KTOR_API = ClassName("io.ktor.utils.io", "ExperimentalKtorApi")
 
 private fun httpMethodMember(method: HttpMethod): MemberName =
     MemberName("io.ktor.server.routing", method.name.lowercase())
@@ -56,12 +61,17 @@ public class RouteFileGenerator(private val codeGenerator: CodeGenerator) {
         val fileName = "Nomi${server.declaration.simpleName.asString()}Routes"
         val visibility = server.visibility.toKModifier() ?: KModifier.PUBLIC
 
+        val optIn = AnnotationSpec.builder(OPT_IN).addMember("%T::class", INTERNAL_NOMI_API)
+        // describe/hide are @ExperimentalKtorApi, so the opt-in is added only by a service that asked
+        // for specs - a service that did not should not inherit an experimental marker it never uses.
+        if (server.withOpenApiSpecs) optIn.addMember("%T::class", EXPERIMENTAL_KTOR_API)
+
         val funSpec = FunSpec.builder(server.routeName)
-            .addAnnotation(AnnotationSpec.builder(OPT_IN).addMember("%T::class", INTERNAL_NOMI_API).build())
+            .addAnnotation(optIn.build())
             .addModifiers(visibility)
             .receiver(ROUTE_TYPE)
             .addParameter("service", implClassName)
-            .addCode(renderChildren(buildRouteTree(server.endpoints)))
+            .addCode(renderChildren(buildRouteTree(server.endpoints), server))
             .build()
 
         val fileSpec = FileSpec.builder(server.packageName, fileName)
@@ -72,19 +82,19 @@ public class RouteFileGenerator(private val codeGenerator: CodeGenerator) {
         fileSpec.writeTo(codeGenerator, aggregating = false, originatingKSFiles = listOfNotNull(server.containingFile))
     }
 
-    private fun renderChildren(node: RouteNode): CodeBlock {
+    private fun renderChildren(node: RouteNode, server: AnalyzedServerService): CodeBlock {
         val builder = CodeBlock.builder()
-        for (endpoint in node.endpoints) builder.add(renderHandler(endpoint))
+        for (endpoint in node.endpoints) builder.add(renderHandler(endpoint, server))
         for (child in node.children.values) {
             val path = "/" + child.resource!!.path.segments.joinToString("/")
             builder.beginControlFlow("%M(%S)", ROUTE_FN, path)
-            builder.add(renderChildren(child))
+            builder.add(renderChildren(child, server))
             builder.endControlFlow()
         }
         return builder.build()
     }
 
-    private fun renderHandler(endpoint: AnalyzedEndpoint): CodeBlock {
+    private fun renderHandler(endpoint: AnalyzedEndpoint, server: AnalyzedServerService): CodeBlock {
         val builder = CodeBlock.builder()
         builder.beginControlFlow("%M", httpMethodMember(endpoint.method))
 
@@ -111,8 +121,52 @@ public class RouteFileGenerator(private val codeGenerator: CodeGenerator) {
             builder.endControlFlow()
         }
 
-        builder.endControlFlow()
+        // The method block is closed by hand rather than with endControlFlow, because describe/hide
+        // chain onto the Route it returns and beginControlFlow cannot express a chained call - the
+        // same reason renderMultipartArg writes its own braces.
+        builder.unindent()
+        builder.add(renderOpenApi(endpoint, server))
         return builder.build()
+    }
+
+    // Computed once per generated file: the ids of a service's endpoints depend on each other, since
+    // a collision between two of them is what decides whether the method joins the name.
+    private val operationIdCache = mutableMapOf<AnalyzedServerService, Map<AnalyzedEndpoint, String>>()
+
+    private fun operationIds(server: AnalyzedServerService): Map<AnalyzedEndpoint, String> =
+        operationIdCache.getOrPut(server) {
+            OpenApiDescribeRenderer.operationIds(server.declaration.simpleName.asString(), server.endpoints)
+        }
+
+    private fun renderOpenApi(endpoint: AnalyzedEndpoint, server: AnalyzedServerService): CodeBlock {
+        if (!server.withOpenApiSpecs) return CodeBlock.of("}\n")
+
+        val override = server.overrides[endpoint.declaration]
+        if (override?.annotationNamed(HIDE_FROM_OPEN_API_FQ) != null) {
+            return CodeBlock.of("}.%M()\n", HIDE)
+        }
+
+        val operationId = operationIds(server).getValue(endpoint)
+
+        val builder = CodeBlock.builder()
+        builder.add("}.%M {\n", DESCRIBE).indent()
+        builder.add(OpenApiDescribeRenderer.render(endpoint, endpointDoc(endpoint, override), operationId))
+        builder.unindent().add("}\n")
+        return builder.build()
+    }
+
+    /** The endpoint's KDoc as OpenAPI wants it. Read from the interface, where the contract is
+     * documented, falling back to the implementation's own when the interface carries none. */
+    private fun endpointDoc(endpoint: AnalyzedEndpoint, override: KSFunctionDeclaration?): EndpointDoc? {
+        val raw = endpoint.declaration.docString?.takeIf { it.isNotBlank() }
+            ?: override?.docString?.takeIf { it.isNotBlank() }
+            ?: return null
+
+        val lines = raw.trim().lines().map { it.trim().removePrefix("*").trim() }.filter { it.isNotEmpty() }
+        if (lines.isEmpty()) return null
+        val summary = lines.first()
+        val description = lines.drop(1).joinToString(" ").takeIf { it.isNotEmpty() }
+        return EndpointDoc(summary, description)
     }
 
     // NomiArticleComments(articleId = decode(UuidStringer, call.parameters["articleId"]!!))
