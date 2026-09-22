@@ -1,5 +1,7 @@
 package org.kodein.rest.nomi.demo.server
 
+import io.ktor.http.ContentType
+import kotlinx.io.Buffer
 import kotlinx.io.readString
 import org.kodein.rest.nomi.Either
 import org.kodein.rest.nomi.Either.Companion.value
@@ -52,6 +54,20 @@ class ServerToolsService : ToolsService {
         println("  file: $file")
 
         return Either.unit()
+    }
+
+    override suspend fun Tools.Download.get(): Either<EndpointBinary, NoFail> {
+        // The mirror of `put`: the bytes go straight to the response channel, with no serialization
+        // and no ContentNegotiation. The size is known here, so it goes out as a Content-Length -
+        // leaving it null is what makes the answer chunked.
+        val bytes = "Nomi streams this response.".encodeToByteArray()
+        return value(
+            EndpointBinary(
+                size = bytes.size.toLong(),
+                contentType = ContentType.Text.Plain,
+                source = { Buffer().apply { write(bytes) } },
+            )
+        )
     }
 
     override suspend fun Tools.put(data: EndpointBinary): Either<Unit, NoFail> {

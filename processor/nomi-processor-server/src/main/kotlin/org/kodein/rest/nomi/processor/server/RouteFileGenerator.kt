@@ -28,6 +28,7 @@ private val ROUTE_TYPE = ClassName("io.ktor.server.routing", "Route")
 private val ROUTE_FN = MemberName("io.ktor.server.routing", "route")
 private val RECEIVE = MemberName("io.ktor.server.request", "receive")
 private val RESPOND = MemberName("org.kodein.rest.nomi.server", "respond")
+private val RESPOND_ENDPOINT_BINARY = MemberName("org.kodein.rest.nomi.server", "respondEndpointBinary")
 private val DECODE = MemberName("org.kodein.rest.nomi.server", "decode")
 private val DECODE_OR_NULL = MemberName("org.kodein.rest.nomi.server", "decodeOrNull")
 private val DECODE_REQUIRED = MemberName("org.kodein.rest.nomi.server", "decodeRequired")
@@ -96,7 +97,10 @@ public class RouteFileGenerator(private val codeGenerator: CodeGenerator) {
             builder.beginControlFlow("try")
         }
 
-        builder.beginControlFlow("call.%M(service)", RESPOND)
+        // A streamed answer goes out through respondEndpointBinary, which writes the bytes straight to
+        // the response channel instead of serializing them, and closes the binary afterwards. The close
+        // cannot live here as it does for a received body: this binary does not exist until the block runs.
+        builder.beginControlFlow("call.%M(service)", if (endpoint.streamedValue) RESPOND_ENDPOINT_BINARY else RESPOND)
         builder.add(renderCall(endpoint))
         builder.add("\n")
         builder.endControlFlow()

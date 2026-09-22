@@ -393,10 +393,10 @@ connection by then. Read what you need while you are still in the endpoint.
 
 ``EndpointBinary`` and ``EndpointFile`` are not interchangeable, and Nomi says so rather than
 letting either fail at runtime: an `EndpointFile` is one part of a multipart body and carries a file
-name, so it is rejected as a whole body; an `EndpointBinary` is a whole body, so it is rejected as a
-part payload. `EndpointBinary` describes a *request* body only: as an endpoint's success type it is
-an error. To consume a *response* as a stream, keep the endpoint's ordinary return type and read it
-inside <<streaming-a-response,``callStreaming``>>.
+name, so it is rejected as a whole body, and as a success type; an `EndpointBinary` is a whole body,
+so it is rejected as a part payload.
+An `EndpointBinary` travels either way — as a parameter it is the request body, as the success type
+it is the response body (see <<streaming-a-response,Streaming a response>>).
 
 === Query parameters
 
@@ -1024,6 +1024,56 @@ Failures fold exactly as they do for `call`. A business failure still reaches th
 answers the failing `Either`, and the handler decides what to do with it — while a transport error
 or an unexpected status never gets that far and becomes a `NetworkFailure` or a `ServerFailure`
 (see <<callstatus,`CallStatus`>>).
+
+
+==== Streaming a raw response body
+
+An endpoint whose success type is an `EndpointBinary` answers raw bytes: the server writes them
+straight to the response channel, with no serialization and no `ContentNegotiation`, exactly as
+<<streaming-a-request-body,a streamed request body>> travels the other way.
+
+.ToolsService.kt
+[source,kotlin]
+----
+suspend fun Tools.Download.get(): Either<EndpointBinary, NoFail>
+----
+
+.ServerToolsService.kt
+[source,kotlin]
+----
+override suspend fun Tools.Download.get(): Either<EndpointBinary, NoFail> {
+    val bytes = "Nomi streams this response.".encodeToByteArray()
+    return Either.value(
+        EndpointBinary(
+            size = bytes.size.toLong(),
+            contentType = ContentType.Text.Plain,
+            source = { Buffer().apply { write(bytes) } },
+        )
+    )
+}
+----
+
+Leave `size` `null` and the response goes out `Transfer-Encoding: chunked`, the honest answer when
+the length is not known until the stream ends.
+
+Client-side the binary is read inside the handler, where the response is still open:
+
+.main.kt
+[source,kotlin]
+----
+tools.callStreaming({ Tools().Download().get() }) { get ->
+    get().mapValue { binary -> binary.source().use { it.readString() } }
+}
+----
+
+IMPORTANT: Such an endpoint *must* be called through `callStreaming`. A plain `call` — or a `flow`,
+which goes through one — reads and closes the response before returning, leaving nothing to stream,
+so Nomi refuses it before the request goes out rather than handing back a binary over a dead
+connection.
+
+NOTE: A received response body has the same lifetime rule as a received request body: it is
+single-pass, and valid only until the handler returns. Read what you need while you are still
+inside it — a binary kept past that point throws on its next read.
 
 === `CallStatus`
 

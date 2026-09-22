@@ -330,8 +330,11 @@ public object NomiErrors {
     public fun partPayloadIsEndpointBinary(part: String): String =
         "part '$part': EndpointBinary is a whole request body, not a multipart part - use EndpointFile for a part"
 
-    public fun returnValueIsBinary(endpoint: String, type: String): String =
-        "endpoint '$endpoint': '$type' cannot be a success type - Nomi streams a request body, not a response one"
+    public fun returnValueIsEndpointFile(endpoint: String): String =
+        "endpoint '$endpoint': EndpointFile is a multipart part, not a response body - use EndpointBinary to stream a whole response"
+
+    public fun returnValueIsNullableBinary(endpoint: String): String =
+        "endpoint '$endpoint': EndpointBinary cannot be nullable - an endpoint that may answer nothing returns Either<Unit, E>"
 
     // --- Multipart part types --------------------------------------------------------------------
 

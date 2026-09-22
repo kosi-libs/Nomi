@@ -283,34 +283,29 @@ public annotation class InternalNomiAPI
  *
  * Its two forms are not interchangeable, and Nomi rejects each in the other's position:
  * [EndpointFile] is one part of a `multipart/form-data` body and carries a file name, while
- * [EndpointBinary] is a whole raw request body.
+ * [EndpointBinary] is a whole raw body - a request's or a response's.
  *
- * [source] is a provider, not a value, so nothing is read until something asks. One received off a
- * request has a lifetime: [close] ends it, and every later [source] call then throws rather than
- * reading a buffer the server has already handed back.
+ * Each form declares its own `source`, a provider rather than a value, so nothing is read until
+ * something asks. They differ in one way that matters: ``EndpointBinary``'s is `suspend`, so it can
+ * pull from a live channel, while ``EndpointFile``'s is not, because ktor's multipart builder takes
+ * a plain provider. Both share a lifetime: [close] ends it, and every later read then throws rather
+ * than reading a buffer that has already been handed back.
  */
 public sealed class AbstractEndpointBinary(
     public val size: Long? = null,
     public val contentType: ContentType = ContentType.Application.OctetStream,
-    source: () -> Source,
 ) {
-    private val provider: () -> Source = source
     private var closed: Boolean = false
 
-    /**
-     * Opens the content.
-     *
-     * Throws [IllegalStateException] once this has been [close]d - for a multipart file, when its
-     * part was released; for a request body, when the endpoint returned.
-     */
-    public val source: () -> Source = {
+    /** Throws [IllegalStateException] once this has been [close]d - for a multipart file, when its
+     * part was released; for a body, when the endpoint or the streaming handler returned. */
+    protected fun checkOpen() {
         check(!closed) { closedErrorMessage() }
-        provider()
     }
 
     protected abstract fun closedErrorMessage(): String
 
-    /** Ends this content's lifetime: every later [source] call fails. */
+    /** Ends this content's lifetime: every later read fails. */
     @InternalNomiAPI
     public fun close() {
         closed = true
@@ -325,13 +320,25 @@ public sealed class AbstractEndpointBinary(
  * part is released, which happens as soon as its `forEachPart` handler returns. Reading it after
  * that throws [IllegalStateException] — it would otherwise read from a buffer the server has
  * already handed back. A file you build yourself to upload is never closed.
+ *
+ * [source] is deliberately not `suspend`, unlike ``EndpointBinary``'s: ktor's `InputProvider` takes
+ * a plain `() -> Source`, and a suspending one could not be handed to it without buffering every
+ * upload into memory first.
  */
 public class EndpointFile(
     public val fileName: String,
     fileSize: Long? = null,
     contentType: ContentType = ContentType.Application.OctetStream,
     source: () -> Source,
-) : AbstractEndpointBinary(fileSize, contentType, source) {
+) : AbstractEndpointBinary(fileSize, contentType) {
+    private val provider: () -> Source = source
+
+    /** Opens the file's content. */
+    public val source: () -> Source = {
+        checkOpen()
+        provider()
+    }
+
     public val fileSize: Long? get() = super.size
 
     override fun closedErrorMessage(): String =
@@ -343,22 +350,32 @@ public class EndpointFile(
 }
 
 /**
- * A whole request body, streamed.
+ * A whole raw body, streamed - a request's when an endpoint takes one as its body parameter, a
+ * response's when an endpoint returns one.
  *
- * An endpoint declaring one as its body parameter sends and receives raw bytes: the client
- * announces this [contentType] and, when [size] is known, a matching `Content-Length` - a `null`
- * size goes out `Transfer-Encoding: chunked`. Nothing is serialized, and `ContentNegotiation` is
- * not consulted (README.adoc § Streaming a request body).
+ * Whichever way it travels, the sender announces this [contentType] and, when [size] is known, a
+ * matching `Content-Length` - a `null` size goes out `Transfer-Encoding: chunked`. Nothing is
+ * serialized and `ContentNegotiation` is not consulted (README.adoc § Streaming a request body,
+ * § Streaming a response).
  *
- * A received body is single-pass and valid only inside its endpoint: opening [source] twice
- * throws, and so does reading it after the endpoint returned. For one part of a multipart body,
- * use [EndpointFile] instead; a streamed *response* is not supported.
+ * One received is single-pass and outlives nothing: opening [source] twice throws, and so does
+ * reading it once its scope has ended - the endpoint returning, for a request body, or the
+ * `callStreaming` handler returning, for a response one. That is why a binary-returning endpoint
+ * can only be called through `callStreaming`: a plain `call` closes the response before handing
+ * anything back. For one part of a multipart body, use [EndpointFile] instead.
  */
 public class EndpointBinary(
     size: Long? = null,
     contentType: ContentType = ContentType.Application.OctetStream,
-    source: () -> Source,
-) : AbstractEndpointBinary(size, contentType, source) {
+    source: suspend () -> Source,
+) : AbstractEndpointBinary(size, contentType) {
+    private val provider: suspend () -> Source = source
+
+    /** Opens the content. `suspend` so that it can pull from a channel that has not arrived yet. */
+    public val source: suspend () -> Source = {
+        checkOpen()
+        provider()
+    }
 
     override fun closedErrorMessage(): String =
         "EndpointBinary was read after being closed."

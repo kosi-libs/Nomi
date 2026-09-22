@@ -301,8 +301,11 @@ method conflict is legal.
   overlap between `V` and `E` would make a failure indistinguishable from a value at runtime.
 * `V` may be `Unit`, or nullable — both cases answer `204 No Content` (see the root README's Wire protocol section).
 * `NoFail` must not be used as `V`.
-* `EndpointBinary` and `EndpointFile` must not be used as `V`: Nomi streams a request body, not a response one - a
-  ktor response stays streamable only inside `execute { }`, which the client's call shape does not provide.
+* `EndpointFile` must not be used as `V`: a file is one part of a multipart body, and a whole streamed response is
+  an `EndpointBinary` - the same split the request side makes.
+* `EndpointBinary` may be used as `V`, and makes the endpoint stream its response: the server writes the bytes
+  straight to the response channel rather than serializing them, and the client reads them off the still-open
+  response. It must not be nullable - nothing-to-send is already spelled `Either<Unit, E>`, which answers `204`.
 
 [#multipart-part-types]
 === Multipart part types (`@Endpoint.MultipartFormData`)
@@ -566,6 +569,25 @@ put {
 `receiveEndpointBinary` takes the service as an ordinary argument rather than a context parameter, because at that
 point `respond`'s block - and with it the `EndpointService` context - has not been entered yet.
 
+An endpoint *returning* an `EndpointBinary` is emitted with `respondEndpointBinary` in place of `respond`, and with no
+`try`/`finally` of its own:
+
+[source,kotlin]
+----
+`get` {
+  call.respondEndpointBinary(service) {
+    NomiToolsDownload
+    .`get`()
+  }
+}
+----
+
+`respondEndpointBinary` is a sibling of `respond` rather than a branch inside it: `respond` hands its success to
+`ContentNegotiation`, which is exactly what raw bytes must not go through.
+The close cannot be generated here the way it is for a received body, because the binary does not exist until the
+block has run - so the runtime closes it, and does so from *inside* ktor's content writer rather than around
+`respond`, which returns as soon as the content is handed to the pipeline and before a single byte is written.
+
 An endpoint taking a `Multipart<T>` reads `call.receiveMultipart()` instead of `call.receive()`, and wraps it in an
 `EndpointMultipartReceiver` carrying the part-presence map from the declaration and a transform that decodes one
 `PartData` into a part:
@@ -823,6 +845,17 @@ sending nothing.
   ahead of `property` — so the annotation arrives as a `KSValueParameter` whose parent is a constructor, not as a
   `KSPropertyDeclaration`. `StrayAnnotationChecks` must accept that position, or users are forced to write
   `@property:Endpoint.Stringed(…)`.
+* *A streamed response's close belongs inside the content writer, not around `respond`.* `call.respond(content)`
+  returns once the `OutgoingContent` is handed to the pipeline; ktor invokes the writer afterwards. Closing the
+  binary around the `respond` call therefore spends it before a byte goes out, and the response arrives empty - with
+  a `Content-Length` mismatch when the size was declared.
+* *A binary-returning endpoint can only be called through `callStreaming`, and that is a runtime rule.* The
+  processor cannot see the call site, so the client runtime refuses a plain `call` before sending anything, and
+  closes the binary when the handler returns. Both halves matter: without the first the caller gets a binary over a
+  closed response, without the second one smuggled out of the handler fails with ktor's message instead of Nomi's.
+* *``EndpointBinary``'s `source` is `suspend`; ``EndpointFile``'s is not.* A response body has to be pulled from a
+  channel, which suspends. A file cannot follow: ktor's `InputProvider` takes a plain `() -> Source`, so a
+  suspending file source could not be handed to the multipart builder without buffering every upload into memory.
 * *``asEndpointFile`` must not be imported; `asEndpointValue` must.* The first is a member extension of `PartScope`,
   the transform's receiver, and resolves inside the transform lambda with no import at all — emitting one is an
   unresolved reference. The second is top-level and needs its import like any other runtime function.

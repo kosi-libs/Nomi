@@ -7,6 +7,7 @@ import com.tschuchort.compiletesting.SourceFile
 import org.jetbrains.kotlin.compiler.plugin.ExperimentalCompilerApi
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /** SPECS.adoc § Endpoint return types. */
@@ -378,42 +379,69 @@ class EndpointReturnTypeTests {
         assertTrue(result.errors().any { it.contains("SomeFailure") && it.contains("less visible") }, result.errors().toString())
     }
 
-    @Test
-    fun `rejects EndpointBinary and EndpointFile as the success type`() {
-        for (type in listOf("EndpointBinary", "EndpointFile")) {
-            val result = compile(
-                SourceFile.kotlin(
-                    "endpoints.kt",
-                    """
-                    package test
-                    import org.kodein.rest.nomi.Endpoint
-                    import org.kodein.rest.nomi.EndpointBinary
-                    import org.kodein.rest.nomi.EndpointFile
-                    import org.kodein.rest.nomi.EndpointService
-                    import org.kodein.rest.nomi.Either
-                    import org.kodein.rest.nomi.NoFail
-                    import org.kodein.rest.nomi.server.ServerEndpointService
+    /** The source of a one-endpoint service whose success type is [type], server side included. */
+    private fun returningSource(type: String) = SourceFile.kotlin(
+        "endpoints.kt",
+        """
+        package test
+        import org.kodein.rest.nomi.Endpoint
+        import org.kodein.rest.nomi.EndpointBinary
+        import org.kodein.rest.nomi.EndpointFile
+        import org.kodein.rest.nomi.EndpointService
+        import org.kodein.rest.nomi.Either
+        import org.kodein.rest.nomi.NoFail
+        import org.kodein.rest.nomi.server.ServerEndpointService
 
-                    @Endpoint.Resource
-                    interface Res
+        @Endpoint.Resource
+        interface Res
 
-                    @Endpoint.Service
-                    interface Svc : EndpointService {
-                        suspend fun Res.`get`(): Either<$type, NoFail>
-                    }
-
-                    @ServerEndpointService("svc")
-                    class ServerImpl : Svc {
-                        override suspend fun Res.`get`(): Either<$type, NoFail> = TODO()
-                    }
-                    """,
-                ),
-            )
-            assertEquals(KotlinCompilation.ExitCode.COMPILATION_ERROR, result.exitCode, type)
-            assertTrue(
-                result.errors().any { it.contains("streams a request body, not a response one") },
-                "$type: ${result.errors()}",
-            )
+        @Endpoint.Service
+        interface Svc : EndpointService {
+            suspend fun Res.`get`(): Either<$type, NoFail>
         }
+
+        @ServerEndpointService("svc")
+        class ServerImpl : Svc {
+            override suspend fun Res.`get`(): Either<$type, NoFail> = TODO()
+        }
+        """,
+    )
+
+    @Test
+    fun `accepts EndpointBinary as the success type and streams it`() {
+        // The response counterpart of an EndpointBinary body. It must not go through respond, which
+        // would hand the raw bytes to ContentNegotiation.
+        val result = compile(returningSource("EndpointBinary"))
+
+        assertEquals(KotlinCompilation.ExitCode.OK, result.exitCode, result.errors().joinToString("\n"))
+        val generated = result.generated("NomiServerImplRoutes.kt")
+        assertTrue(generated.contains("respondEndpointBinary(service)"), generated)
+        assertFalse(generated.contains("call.respond(service)"), generated)
+    }
+
+    @Test
+    fun `rejects EndpointFile as the success type and points at EndpointBinary`() {
+        // Same split as on the request side: a file is one part of a multipart body, a whole
+        // streamed response is an EndpointBinary.
+        val result = compile(returningSource("EndpointFile"))
+
+        assertEquals(KotlinCompilation.ExitCode.COMPILATION_ERROR, result.exitCode)
+        assertTrue(
+            result.errors().any { it.contains("use EndpointBinary to stream a whole response") },
+            result.errors().toString(),
+        )
+    }
+
+    @Test
+    fun `rejects a nullable EndpointBinary as the success type`() {
+        // Nothing-to-send already has a spelling - Either<Unit, E>, which answers 204 - so a null
+        // binary would be a second way to say it, with no wire form of its own.
+        val result = compile(returningSource("EndpointBinary?"))
+
+        assertEquals(KotlinCompilation.ExitCode.COMPILATION_ERROR, result.exitCode)
+        assertTrue(
+            result.errors().any { it.contains("EndpointBinary cannot be nullable") },
+            result.errors().toString(),
+        )
     }
 }

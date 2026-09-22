@@ -6,6 +6,7 @@ import com.google.devtools.ksp.symbol.KSFunctionDeclaration
 import com.google.devtools.ksp.symbol.KSType
 import com.google.devtools.ksp.symbol.KSValueParameter
 import com.google.devtools.ksp.symbol.Visibility
+import org.kodein.rest.nomi.processor.common.NomiFq
 import org.kodein.rest.nomi.processor.common.multipart.AnalyzedMultipart
 import org.kodein.rest.nomi.processor.common.path.PathSegment
 import org.kodein.rest.nomi.processor.common.resource.AnalyzedResource
@@ -74,6 +75,13 @@ public class AnalyzedEndpoint(
 
     /** The full route path: every resource in [resource]'s chain, root first, concatenated. */
     public val fullPath: List<PathSegment> get() = resource.chain.flatMap { it.path.segments }
+
+    /** Whether this endpoint streams its answer, its success type being an `EndpointBinary`: the
+     * server writes it straight to the response channel, and the client reads it inside the
+     * `callStreaming` handler that keeps the response open. Derived from [valueType] rather than
+     * passed in, there being exactly one type this can be. */
+    public val streamedValue: Boolean
+        get() = valueType.declaration.qualifiedName?.asString() == NomiFq.ENDPOINT_BINARY
 }
 
 /** A fully validated `@Endpoint.Service` interface - never constructed for an invalid one.

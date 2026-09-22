@@ -19,6 +19,8 @@ interface Tools {
     @Endpoint.Resource
     interface Headers : Tools
 
+    @Endpoint.Resource
+    interface Download : Tools
 
 }
 
@@ -31,6 +33,8 @@ interface ToolsService : EndpointService {
     suspend fun Tools.post(parts: Multipart<ToolsPostData>): Either<Unit, NoFail>
 
     suspend fun Tools.put(data: EndpointBinary): Either<Unit, NoFail>
+
+    suspend fun Tools.Download.get(): Either<EndpointBinary, NoFail>
 
 }
 

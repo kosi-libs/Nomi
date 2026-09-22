@@ -93,10 +93,15 @@ public object ReturnTypeChecks {
         if (fqName == NomiFq.NO_FAIL) {
             reporter.error(function, NomiErrors.endpointReturnValueIsNoFail(name)); return false
         }
-        // Nomi streams a request body, not a response one: a response stays streamable only inside
-        // ktor's `execute { }`, which the client's call shape does not provide.
-        if (fqName == NomiFq.ENDPOINT_BINARY || fqName == NomiFq.ENDPOINT_FILE) {
-            reporter.error(function, NomiErrors.returnValueIsBinary(name, valueArg.declaration.fq())); return false
+        // An EndpointFile is one part of a multipart body; a whole streamed response is an
+        // EndpointBinary, exactly as it is for a request body.
+        if (fqName == NomiFq.ENDPOINT_FILE) {
+            reporter.error(function, NomiErrors.returnValueIsEndpointFile(name)); return false
+        }
+        // A streamed response is bytes or it is nothing: null would have to travel as 204, which is
+        // what Either<Unit, E> already means.
+        if (fqName == NomiFq.ENDPOINT_BINARY && valueArg.isMarkedNullable) {
+            reporter.error(function, NomiErrors.returnValueIsNullableBinary(name)); return false
         }
         return true
     }

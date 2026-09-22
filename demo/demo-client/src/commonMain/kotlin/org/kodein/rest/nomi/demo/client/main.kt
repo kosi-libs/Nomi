@@ -8,11 +8,10 @@ import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.utils.io.core.*
 import kotlinx.coroutines.flow.Flow
-import org.kodein.rest.nomi.Either
+import kotlinx.io.readString
 import org.kodein.rest.nomi.EndpointBinary
 import org.kodein.rest.nomi.EndpointFile
 import org.kodein.rest.nomi.Error
-import org.kodein.rest.nomi.NoFail
 import org.kodein.rest.nomi.client.CallStatus
 import org.kodein.rest.nomi.client.ServiceCaller
 import org.kodein.rest.nomi.client.call
@@ -20,7 +19,6 @@ import org.kodein.rest.nomi.client.callChainFlow
 import org.kodein.rest.nomi.client.callStreaming
 import org.kodein.rest.nomi.client.mapFailure
 import org.kodein.rest.nomi.client.successOr
-import org.kodein.rest.nomi.client.successOrNull
 import org.kodein.rest.nomi.demo.shared.Article
 import org.kodein.rest.nomi.demo.shared.ArticleComment
 import org.kodein.rest.nomi.demo.shared.ArticleCommentPostFailure
@@ -29,11 +27,11 @@ import org.kodein.rest.nomi.demo.shared.ArticleCreationFailure
 import org.kodein.rest.nomi.demo.shared.Articles
 import org.kodein.rest.nomi.demo.shared.ArticlesService
 import org.kodein.rest.nomi.demo.shared.Comments
+import org.kodein.rest.nomi.demo.shared.Download
 import org.kodein.rest.nomi.demo.shared.Headers
 import org.kodein.rest.nomi.demo.shared.New
 import org.kodein.rest.nomi.demo.shared.SharedJson
 import org.kodein.rest.nomi.demo.shared.Tools
-import org.kodein.rest.nomi.demo.shared.ToolsPostData
 import org.kodein.rest.nomi.mapValue
 import kotlin.uuid.Uuid
 
@@ -100,6 +98,13 @@ suspend fun main() {
                 source = { streamed },
             )
         )
+    }.also { println(it) }
+
+    APIServices.tools(client).callStreaming({ Tools().Download().get() }) { get ->
+        // The binary is only alive inside this block, so it is read here rather than handed back.
+        get().mapValue { binary ->
+            "${binary.size ?: "?"} bytes of ${binary.contentType}: ${binary.source().use { it.readString() }}"
+        }
     }.also { println(it) }
 
     client.close()

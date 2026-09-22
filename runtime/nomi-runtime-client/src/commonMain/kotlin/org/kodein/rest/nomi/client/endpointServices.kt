@@ -12,6 +12,7 @@ import org.kodein.rest.nomi.Either.Companion.error
 import org.kodein.rest.nomi.Either.Companion.unit
 import org.kodein.rest.nomi.Either.Companion.value
 import io.ktor.http.content.ChannelWriterContent
+import io.ktor.utils.io.readRemaining
 import io.ktor.utils.io.writeSource
 import org.kodein.rest.nomi.EndpointBinary
 import org.kodein.rest.nomi.EndpointFile
@@ -56,17 +57,26 @@ public abstract class NomiClientEndpointService(
     private var called: Boolean = false
 
     /** Reads a response into the endpoint's `Either`, per README.adoc § Wire protocol: `204` is the
-     * empty success, `422` the business failure, any other non-success an [EndpointStatusCodeException]. */
+     * empty success, `422` the business failure, any other non-success an [EndpointStatusCodeException].
+     *
+     * [onStreamedValue] receives the [EndpointBinary] when the endpoint streams its answer, so that
+     * the caller - which alone knows when the response scope ends - can close it afterwards. */
     @InternalNomiAPI
     private suspend fun <S, F : Error> HttpResponse.eitherBody(
         successType: TypeInfo,
         errorType: TypeInfo,
+        onStreamedValue: (EndpointBinary) -> Unit = {},
     ): Either<S, F> =
         if (status.isSuccess()) {
             if (status == HttpStatusCode.NoContent) {
                 @Suppress("UNCHECKED_CAST")
                 if (successType.type == Unit::class) unit<F>() as Either<S, F>
                 else value(null as S)
+            // A streamed answer is read off the still-open response rather than through
+            // ContentNegotiation, which would try to deserialize the raw bytes.
+            } else if (successType.type == EndpointBinary::class) {
+                @Suppress("UNCHECKED_CAST")
+                value(endpointBinary().also(onStreamedValue) as S)
             } else value(body(successType))
         } else {
             if (status == HttpStatusCode.UnprocessableEntity) error(body(errorType))
@@ -93,6 +103,30 @@ public abstract class NomiClientEndpointService(
             throw EndpointNetworkException(e.message, e)
         }
 
+    /** The response's own body as an [EndpointBinary], mirroring the server's `receiveEndpointBinary`:
+     * an absent `Content-Type` is `application/octet-stream`, an absent `Content-Length` an unknown
+     * size, and the channel is taken once.
+     *
+     * The read happens when the handler asks, not here - which is what ``EndpointBinary``'s suspending
+     * source buys. It is `readRemaining`, the one channel-to-`Source` bridge ktor offers in common
+     * code: `asSource`, which would hand back the channel incrementally, exists on JVM and native but
+     * not on JS or Wasm, so a common implementation cannot be incremental. */
+    private suspend fun HttpResponse.endpointBinary(): EndpointBinary {
+        // contentType() answers null rather than ContentType.Any when the header is absent.
+        val type = contentType() ?: ContentType.Application.OctetStream
+        val channel = bodyAsChannel()
+        var opened = false
+        return EndpointBinary(
+            size = contentLength(),
+            contentType = type,
+            source = {
+                check(!opened) { "The response body has already been read - an EndpointBinary body is single-pass." }
+                opened = true
+                channel.readRemaining()
+            },
+        )
+    }
+
     @InternalNomiAPI
     @PublishedApi
     internal suspend fun <S, F : Error> HttpClient.call(
@@ -102,6 +136,13 @@ public abstract class NomiClientEndpointService(
         method: HttpMethod,
         buildRequest: ServiceCaller.KtorRequestBuilder = {}
     ): Either<S, F> {
+        // A streamed answer needs the response to stay open, which only callStreaming provides. Checked
+        // before anything is sent, so the mistake costs no request - and left as an IllegalStateException,
+        // a programmer error, rather than folded into a CallStatus the caller might ignore.
+        check(streamingHandler != null || successType.type != EndpointBinary::class) {
+            "An endpoint returning an EndpointBinary must be called with callStreaming: a plain call " +
+                    "reads and closes the response before returning, leaving nothing to stream."
+        }
         check(!called) { "A ServiceCaller call can only call one service method." }
         called = true
 
@@ -134,7 +175,15 @@ public abstract class NomiClientEndpointService(
                 // works. It is handed a function rather than a value: nothing is read until it calls,
                 // and eitherBody - the read - therefore happens within this scope too.
                 statement.execute { response ->
-                    streamingHandler { response.eitherBody(successType, errorType) }
+                    // A streamed answer lives exactly as long as the handler: closing it here is what
+                    // makes a binary smuggled out of the handler fail on read, rather than quietly
+                    // reading from a response ktor has already closed.
+                    var streamed: EndpointBinary? = null
+                    try {
+                        streamingHandler { response.eitherBody(successType, errorType) { streamed = it } }
+                    } finally {
+                        streamed?.close()
+                    }
                 }
             }
             // Cast 4, the same relabelling as cast 2 and for the same reason: `result` is the

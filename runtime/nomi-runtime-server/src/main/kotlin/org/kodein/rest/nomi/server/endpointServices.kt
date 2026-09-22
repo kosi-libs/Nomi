@@ -81,6 +81,54 @@ public suspend inline fun <T : EndpointService, reified S, reified F : Error> Ro
     }
 }
 
+/**
+ * Responds with a streamed [EndpointBinary] body, for an endpoint whose success type is one.
+ *
+ * A sibling of [respond] rather than a branch inside it: [respond] serializes its success through
+ * `ContentNegotiation`, which is exactly what a raw body must not go through, and it has nowhere to
+ * close a binary that only exists once its own block has run.
+ *
+ * The bytes go out a buffer at a time, announcing the binary's own [EndpointBinary.contentType] and,
+ * when [EndpointBinary.size] is known, a matching `Content-Length` - an unknown size is what makes
+ * ktor fall back to `Transfer-Encoding: chunked`, the honest answer for a stream of unknown length.
+ * The failure branch is unchanged: a business failure is still a serialized `422`.
+ *
+ * The binary is closed once the response has been written, so whatever the service opened to produce
+ * it is released, and a read that outlives the endpoint fails loudly (README.adoc § Streaming a
+ * response).
+ */
+@InternalNomiAPI
+public suspend inline fun <T : EndpointService, reified F : Error> RoutingCall.respondEndpointBinary(
+    service: T,
+    noinline block: suspend T.() -> Either<EndpointBinary, F>,
+) {
+    withContext(RoutingCallElement(this)) {
+        try {
+            service.block()
+                .onValue { binary ->
+                    this@respondEndpointBinary.respond(
+                        ChannelWriterContent(
+                            // Closed here rather than around `respond`: respond hands the content to
+                            // the pipeline and returns, and ktor invokes this body afterwards, when it
+                            // actually writes. Closing any earlier would spend the binary before a
+                            // single byte had gone out.
+                            body = { try { writeSource(binary.source()) } finally { binary.close() } },
+                            contentType = binary.contentType,
+                            status = HttpStatusCode.OK,
+                            contentLength = binary.size,
+                        )
+                    )
+                }
+                .onError { failure ->
+                    this@respondEndpointBinary.respond(status = HttpStatusCode.UnprocessableEntity, message = failure, typeInfo<F>())
+                }
+        } catch (e: EndpointStatusCodeException) {
+            if (e.message == null) respond(e.code)
+            else respond(e.code, e.message!!)
+        }
+    }
+}
+
 @InternalNomiAPI
 context(_: EndpointService)
 public inline fun <reified T> decodeOrNull(stringer: Stringer<T>, encoded: String?): T? {
