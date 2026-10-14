@@ -1,0 +1,19 @@
+= The client factory
+
+A client is generated from an `object` that names the services it fronts.
+This page covers that declaration.
+
+Annotate an `object` with `@ClientEndpointServiceFactory`.
+It is repeatable, so one object can front several services; `name` becomes the generated extension function's name:
+
+[source,kotlin]
+.APIServices.kt
+----
+@ClientEndpointServiceFactory(ArticlesService::class, "articles")
+object APIServices
+----
+
+`APIServices.articles(client)` now returns a `ServiceCaller<ArticlesService>` for any ktor `HttpClient` you hand it.
+There is one such function on that object per service it fronts.
+
+TIP: xref:http-client.adoc[] lists what that `HttpClient` must be configured with.

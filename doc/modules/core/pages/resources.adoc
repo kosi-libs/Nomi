@@ -1,0 +1,74 @@
+= Resources
+
+A resource is a Kotlin interface that stands for a route.
+This page covers how resources nest into paths, how path parameters are declared, and how a resource is built at a call site.
+
+
+== Root and nested
+
+A resource interface is annotated `@Endpoint.Resource`.
+A *root* resource is declared at the top level, or nested only inside plain, non-resource declarations that act as a namespace.
+A *nested* resource is declared directly inside the resource interface it extends, and its path is appended to its parent's.
+
+[source,kotlin]
+.Users.kt
+----
+@Endpoint.Resource("u") interface Users {
+    @Endpoint.Resource interface New : Users
+    @Endpoint.Resource interface User : Users {
+        val userId: Uuid
+        @Endpoint.Resource interface Posts : User {
+            @Endpoint.Resource("p:{postId}") interface Post : Posts {
+                val postId: Uuid
+            }
+        }
+    }
+}
+----
+
+This defines:
+
+----
+/u
+/u/new
+/u/user/{userId}
+/u/user/{userId}/posts
+/u/user/{userId}/posts/p:{postId}
+----
+
+
+== Paths
+
+Leave ``@Endpoint.Resource``'s `path` empty and it is *derived*: the interface's simple name, first letter lowercased, followed by one segment per own path parameter, in declaration order.
+That is how `User` becomes `user/\{userId}` above.
+
+Give it an explicit path and it is used as written.
+`Post` above gets no `post/` segment because its annotation names one explicitly, `p:\{postId}`, which mixes a literal prefix with a single placeholder in one segment.
+`\{id}.json` reads the same way, with a suffix instead of a prefix.
+
+
+== Path parameters
+
+A resource's own path parameters are its abstract, non-nullable `val` properties, each needing a `Stringer` (see xref:stringers.adoc[]).
+A nested resource inherits every path parameter its parents declare — `Post` above carries both `userId` and `postId` — but its generated factory takes only its *own*: `Users.User.Posts.Post(postId)`, reading `userId` off the receiver.
+
+
+== Building a resource
+
+Each resource gets a function named after it, taking that resource's *own* path parameters.
+A root resource's is top-level; a nested one's is an extension on its parent, so a call site reads like the route it addresses:
+
+[source,kotlin]
+----
+Articles()                     // /articles
+Articles().New()               // /articles/new
+Article(articleId)             // /article/{articleId}
+Article(articleId).Comments()  // /article/{articleId}/comments
+----
+
+An inherited path parameter is read off the receiver, never passed again: `Comments()` takes nothing, because `Article` already carries `articleId`.
+
+These functions are callable only where an `EndpointService` is in scope: inside a `call { }` block on the client, or inside an endpoint implementation on the server.
+There is nowhere else to build a resource.
+
+TIP: xref:services.adoc[] shows how endpoints are declared on a resource.

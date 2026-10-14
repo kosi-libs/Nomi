@@ -1,0 +1,82 @@
+= The server service
+
+A server is a class implementing a service interface, annotated so that Nomi generates its routes.
+This page covers the annotation, what an endpoint can do, and how the routes are mounted.
+
+
+== `@ServerEndpointService`
+
+Annotate your implementation class:
+
+[source,kotlin]
+.ServerArticlesService.kt
+----
+@ServerEndpointService("articles")
+class ServerArticlesService : ArticlesService {
+    /* ... */
+}
+----
+
+The `routeName` argument names the generated `Route` extension, `Route.articles(service: ServerArticlesService)` here.
+It registers every endpoint of every service the class implements: exactly the routes the service resolves to (see xref:core:services.adoc[]), each one decoding its own path and query parameters and answering with the status codes of the xref:core:wire-protocol.adoc[].
+You call it once, when mounting the routes.
+
+
+== Inside an endpoint
+
+[cols="1,2"]
+|===
+| Call | Effect
+
+| `Either.error(...)`
+| Answers `422` with the serialized business failure.
+
+| `httpError(code, message)`
+| Aborts with a standard HTTP status — any code but `422`.
+
+| `routingCall()`
+| Reaches the underlying ktor `RoutingCall` for this request.
+|===
+
+[source,kotlin]
+.ServerArticlesService.kt
+----
+private fun getArticle(id: Uuid) =
+    articles.firstOrNull { (articleId) -> articleId == id }
+        ?: httpError(HttpStatusCode.NotFound)
+----
+
+`routingCall()` reaches everything ktor itself knows about the request — headers, remote host, cookies — that is not already surfaced as a path or query parameter:
+
+[source,kotlin]
+.ServerToolsService.kt
+----
+override suspend fun Tools.Headers.get(): Either<List<Pair<String, List<String>>>, NoFail> {
+    val headers = routingCall().request.headers.entries().map { it.key to it.value }.toList()
+    return value(headers)
+}
+----
+
+
+== Mounting the routes
+
+[source,kotlin]
+.main.kt
+----
+embeddedServer(
+    factory = CIO,
+    port = 8080,
+) {
+    install(ContentNegotiation) {
+        json(SharedJson)
+    }
+    routing {
+        articles(ServerArticlesService())
+    }
+}.start(wait = true)
+----
+
+`ContentNegotiation` is not optional.
+Without a converter for the format the client sends, the server can neither read a request body nor serialize a response.
+
+TIP: xref:openapi.adoc[] shows how the mounted routes describe themselves.

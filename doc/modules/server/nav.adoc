@@ -1,0 +1,3 @@
+* Server
+** xref:server-service.adoc[]
+** xref:openapi.adoc[]

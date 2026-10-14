@@ -1,0 +1,7 @@
+= Visibility
+
+Every declaration Nomi reads may be `public` or `internal`.
+This applies to a resource, a service, a `Stringer` object, an `@Endpoint.MultipartFormData` part type, a `@ServerEndpointService` class and a `@ClientEndpointServiceFactory` object.
+
+Whichever it is, the code the processors generate from it carries the same visibility.
+An `internal` service gets an `internal Route` extension, named after its `routeName`, and an `internal` resource gets an `internal` factory, and so on.

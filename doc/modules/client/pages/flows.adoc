@@ -1,0 +1,63 @@
+= Flows
+
+A call also comes as a cold `Flow<CallStatus<S, F>>`, for the UI that wants the `Loading` state as an emission rather than as a separate piece of bookkeeping.
+This page covers the three builders that produce one.
+
+[cols="1,3"]
+|===
+| Builder | Emits
+
+| `caller.flow { }`
+| `Loading`, then one endpoint call's result.
+
+| `callFlow { }`
+| `Loading`, then the result of any `suspend` function returning a `CallStatus.Result`.
+
+| `callChainFlow { }`
+| `Loading`, then the single result of a whole xref:chains.adoc[chain] of calls.
+|===
+
+
+== flow
+
+`flow { }` is ``call { }``'s `Flow` form, and takes the same optional request customization as a second block:
+
+[source,kotlin]
+.main.kt
+----
+APIServices.articles(client)
+    .flow { Articles().get(page = 1) }
+    .collect { status ->
+        when (status) {
+            CallStatus.Loading -> println("Loading…")
+            is CallStatus.Success -> println(status.success)
+            is CallStatus.Failure -> println("Failed: $status")
+        }
+    }
+----
+
+The three branches above are exhaustive: `Loading` is the only state that is neither a `Success` nor a `Failure`.
+
+Every one of these flows is *cold*.
+Nothing is called until the flow is collected, and each collection calls again, so a retry is simply another collection.
+
+
+== callFlow
+
+`callFlow { }` is the same wrapper over anything that answers a `CallStatus.Result`, not just a single endpoint call.
+A repository function that already folds several calls together is one example:
+
+[source,kotlin]
+.ArticleRepository.kt
+----
+class ArticleRepository(private val articles: ServiceCaller<ArticlesService>) {
+
+    suspend fun page(page: Int): CallStatus.Result<List<ArticleSummary>?, NoFail> =
+        articles.call { Articles().get(page = page) }
+
+    fun pageFlow(page: Int): Flow<CallStatus<List<ArticleSummary>?, NoFail>> =
+        callFlow { page(page) }
+}
+----
+
+Two operators read the states as they go by, leaving the flow untouched: `onSuccess { }` runs on every `Success`, `onFailure { }` on every `Failure`.

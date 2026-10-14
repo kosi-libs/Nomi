@@ -1,0 +1,85 @@
+= Streaming a response
+
+A ktor response is only readable while it is open, and `call` reads the whole body before returning.
+An endpoint whose answer you want to consume as a stream needs a scope to consume it in, and `callStreaming` is that scope.
+This page covers it, and the raw binary responses that need it.
+
+
+== callStreaming
+
+`callStreaming` hands your block a *function* that performs the call, and keeps the response open for as long as the block runs.
+
+[source,kotlin]
+.main.kt
+----
+articles.callStreaming({ Article(id).get() }) { get ->
+    get().mapValue { it.content }
+}
+----
+
+Whatever the block returns is the call's result, so it can narrow or transform the answer as it consumes it.
+The `CallStatus` here carries the mapped `String`, not the whole `ArticleContent`.
+
+The endpoint call moves inside the parentheses for the same reason as in xref:calling.adoc[]: the trailing lambda binds to the handler.
+A per-call request customization sits between the two when one is needed:
+
+[source,kotlin]
+.main.kt
+----
+articles.callStreaming(
+    { Article(id).get() },
+    buildRequest = { headers { append("X-Nomi-Demo", "Yay!") } },
+) { get ->
+    get().mapValue { it.content }
+}
+----
+
+Failures fold exactly as they do for `call`.
+A business failure still reaches the handler: `get()` answers the failing `Either`, and the handler decides what to do with it.
+A transport error or an unexpected status never gets that far and becomes a `NetworkFailure` or a `ServerFailure` (see xref:call-status.adoc[]).
+
+
+== A raw response body
+
+An endpoint whose success type is an `EndpointBinary` answers raw bytes.
+The server writes them straight to the response channel, with no serialization and no `ContentNegotiation`, exactly as xref:core:streaming-body.adoc[a streamed request body] travels the other way.
+
+[source,kotlin]
+.ToolsService.kt
+----
+suspend fun Tools.Download.get(): Either<EndpointBinary, NoFail>
+----
+
+[source,kotlin]
+.ServerToolsService.kt
+----
+override suspend fun Tools.Download.get(): Either<EndpointBinary, NoFail> {
+    val bytes = "Nomi streams this response.".encodeToByteArray()
+    return Either.value(
+        EndpointBinary(
+            size = bytes.size.toLong(),
+            contentType = ContentType.Text.Plain,
+            source = { Buffer().apply { write(bytes) } },
+        )
+    )
+}
+----
+
+Leave `size` `null` and the response goes out `Transfer-Encoding: chunked`, the honest answer when the length is not known until the stream ends.
+
+Client-side, the binary is read inside the handler, where the response is still open:
+
+[source,kotlin]
+.main.kt
+----
+tools.callStreaming({ Tools().Download().get() }) { get ->
+    get().mapValue { binary -> binary.source().use { it.readString() } }
+}
+----
+
+IMPORTANT: Such an endpoint *must* be called through `callStreaming`.
+A plain `call` — or a `flow`, which goes through one — reads and closes the response before returning, leaving nothing to stream.
+Nomi refuses it before the request goes out, rather than handing back a binary over a dead connection.
+
+NOTE: A received response body has the same lifetime rule as a received request body: it is single-pass, and valid only until the handler returns.
+Read what you need while you are still inside it, as a binary kept past that point throws on its next read.

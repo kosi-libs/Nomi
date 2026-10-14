@@ -1,0 +1,142 @@
+= Stringers
+
+Every path parameter and query parameter — and every non-file multipart part — is a `String` on the wire.
+A `Stringer<T>` is the two-way conversion between a type and that `String`.
+This page covers the built-in ones, how to write your own, and how to register it.
+
+[source,kotlin]
+----
+public interface Stringer<T> {
+    public fun encode(value: T): String
+    public fun decode(encoded: String): Either<T, Stringer.Failure>
+    public val contentType: ContentType get() = ContentType.Text.Plain
+}
+----
+
+Escaping is not a ``Stringer``'s job.
+The runtime percent-encodes every path segment and query value on its way out, and decodes it on the way back in, so `encode`/`decode` always work in *unescaped* text.
+
+A multipart part is not percent-encoded at all: it carries its ``Stringer``'s `contentType` as its own `Content-Type` header, which is the only place that property is used.
+
+
+== Built-ins
+
+[cols="1,3"]
+|===
+| Type | Encoding
+
+| `Boolean`
+| `"1"` / `"0"`; also decodes `"true"`/`"false"`.
+
+| `Int`
+| Decimal, via `String.toIntOrNull()`.
+
+| `Long`
+| Decimal, via `String.toLongOrNull()`.
+
+| `String`
+| Passthrough — sent and received unchanged.
+|===
+
+They sit at the lowest priority of the <<resolution-order,resolution order>>, so a project may register its own `Stringer` to override one of them, exactly as for any other type.
+
+
+== Declaring one
+
+Any other type needs a `Stringer` you write.
+It must be an `object`:
+
+[source,kotlin]
+.Stringers.kt
+----
+object UuidStringer : Stringer<Uuid> {
+    override fun encode(value: Uuid): String = value.toString()
+    override fun decode(encoded: String): Either<Uuid, Stringer.Failure> =
+        Uuid.parseOrNull(encoded)?.let { Either.value(it) } ?: Either.error(Stringer.Failure("Invalid UUID"))
+}
+----
+
+
+[#registering]
+== Registering one
+
+There are five ways, all equivalent, chosen by how widely the `Stringer` should apply.
+`@Endpoint.UseStringer` is repeatable, so any of the last four can register as many types as you need from a single place.
+
+.On the property or query parameter itself
+[source,kotlin]
+----
+@Endpoint.Resource interface Article {
+    @Endpoint.Stringed(with = UuidStringer::class)
+    val articleId: Uuid
+}
+----
+
+.On one endpoint — its query parameters and multipart parts, not its receiver's path parameters
+[source,kotlin]
+----
+@Endpoint.Service
+interface ArticlesService : EndpointService {
+    @Endpoint.UseStringer(Instant::class, EpochMillisStringer::class)
+    suspend fun Articles.get(@Endpoint.Query since: Instant? = null): Either<List<ArticleSummary>?, NoFail>
+}
+----
+
+.On the resource or service interface
+[source,kotlin]
+----
+@Endpoint.UseStringer(type = Uuid::class, with = UuidStringer::class)
+@Endpoint.Resource interface Article {
+    val articleId: Uuid
+}
+----
+
+.On a parent interface
+[source,kotlin]
+----
+@Endpoint.UseStringer(type = Uuid::class, with = UuidStringer::class)
+@Endpoint.Service interface ServiceBase : EndpointService
+@Endpoint.Service interface ArticlesService : ServiceBase { /* ... */ }
+----
+
+.Through a carrier annotation — the recommended way to share registrations project-wide
+[source,kotlin]
+----
+@Retention(AnnotationRetention.BINARY) // <1>
+@Target(AnnotationTarget.CLASS)
+@Endpoint.UseStringer(Uuid::class, UuidStringer::class) // <2>
+@Endpoint.UseStringer(Instant::class, InstantStringer::class)
+annotation class UseSharedStringers
+
+@UseSharedStringers
+@Endpoint.Resource interface Article {
+    val articleId: Uuid
+}
+
+@UseSharedStringers
+@Endpoint.Service interface ArticlesService : EndpointService {
+    suspend fun Article.get(@Endpoint.Query since: Instant? = null): Either<ArticleContent, NoFail>
+}
+----
+<1> `BINARY` or `RUNTIME`: a `SOURCE` annotation cannot be resolved from a dependent module.
+<2> Stack one per type, as `@Endpoint.UseStringer` repeats.
+
+`InstantStringer` here is declared the same way as `UuidStringer` above.
+One annotation now carries every `Stringer` a project shares between its resources and services.
+
+
+[#resolution-order]
+== Resolution order
+
+The nearest declaration wins:
+
+1. `@Endpoint.Stringed` on the property, query parameter or multipart part payload itself.
+2. Otherwise, the endpoint function, for a query parameter or a multipart part payload.
+3. Otherwise, the part type, for a multipart part payload.
+4. Otherwise, the declaring interface and each interface outward — nearest first — checked for an `@Endpoint.UseStringer` reachable from its own annotation tree.
+5. Otherwise, the built-in `Stringer` for `Boolean`, `Int`, `Long` or `String`.
+
+Scope distance always dominates annotation depth: a registration on a nearer scope wins over one on a farther scope, however many carrier annotations either is reached through.
+
+An endpoint function's registration reaches that endpoint's query parameters and multipart parts, but never its receiver resource's path parameters.
+A resource is analysed on its own, and the factory generated for it has one encoding whichever endpoint addresses it.

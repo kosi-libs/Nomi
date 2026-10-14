@@ -1,0 +1,43 @@
+= Wire protocol
+
+Both generated sides speak the same protocol, which this page describes.
+It matters when you call a Nomi server from something that is not Nomi, or the other way around.
+
+
+== Status codes
+
+[cols="1,3"]
+|===
+| Status | When
+
+| `200 OK`
+| A successful call; the body is the serialized `V`.
+
+| `204 No Content`
+| A successful call with nothing to return — `V` is `Unit`, or `V` is nullable and its value is `null`.
+No body.
+
+| `422 Unprocessable Entity`
+| A business failure; the body is the serialized `E`.
+Reserved by Nomi: `httpError` refuses this code, and the client reads any *other* non-success status as an HTTP-level error rather than a business failure.
+
+| `400 Bad Request`
+| A path or query parameter's `Stringer` failed to decode it, or a required query parameter was missing.
+The body is the `Stringer.Failure` reason.
+A multipart body adds its own causes: a missing required part, a second occurrence of a part that may not repeat, a part the endpoint never declared, a part of the wrong kind, and a part whose `Content-Type` contradicts its ``Stringer``'s.
+A streamed body adds one more: a malformed `Content-Type` header.
+
+| _(anything else)_
+| Whatever `httpError(code, message)` raised, with `message` as the body when one was given.
+|===
+
+
+== Serialization
+
+Serialization itself is entirely yours to configure: Nomi never reads or writes a negotiated body.
+Register ktor's `ContentNegotiation` with the same format on both the server and the client.
+JSON, CBOR, ProtoBuf or anything else ktor supports works identically.
+
+A `multipart/form-data` body is the one exception, and only partly.
+Nomi writes and reads the multipart envelope itself — the part names, the file names, the boundaries — because those are what it declared.
+Each part's *content* is still yours, through its `Stringer` (see xref:multipart.adoc[]).

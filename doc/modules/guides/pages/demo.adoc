@@ -1,0 +1,21 @@
+= The demo
+
+The `demo/` directory of the repository is a full articles-and-comments API built on Nomi.
+It is the place to see every feature of this documentation working together.
+
+[cols="1,3"]
+|===
+| Module | Contents
+
+| `demo-shared`
+| `Articles`/`Article` resources, `ArticlesService`, `MPService` with its `ToolsPostData` part type, `UuidStringer`, and the DTOs.
+
+| `demo-server`
+| `ServerArticlesService`, an in-memory article store, and `main()` starting a ktor server on port 8080.
+
+| `demo-client`
+| A multiplatform client, and `main()` exercising every endpoint against the running server.
+|===
+
+Run ``demo-server``'s `main()` first, then ``demo-client``'s.
+Both are plain `main` functions, run from the IDE like any other Kotlin entry point.

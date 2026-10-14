@@ -1,0 +1,138 @@
+= Multipart form data
+
+An endpoint can take a `multipart/form-data` body instead of a negotiated one — a file upload, typically, or a file alongside the metadata describing it.
+Where an ordinary body is one value, a multipart body is a sequence of named _parts_, and Nomi asks you to declare what those parts are.
+
+
+== Declaring the parts
+
+A _part type_ is a `sealed interface` annotated `@Endpoint.MultipartFormData`, with one nested `data class` per part.
+Each part holds exactly one property: its payload.
+
+[source,kotlin]
+.ToolsPostData.kt
+----
+@Endpoint.MultipartFormData
+sealed interface ToolsPostData {
+
+    data class File(val file: EndpointFile) : ToolsPostData
+
+    @Endpoint.MultipartFormData.Part(presence = PartPresence.Optional)
+    data class From(val from: Uuid) : ToolsPostData
+
+    @Endpoint.MultipartFormData.Part(name = "article", presence = PartPresence.RepeatedRequired)
+    data class With(
+        @Endpoint.Stringed(ArticleContentJsonStringer::class)
+        val content: ArticleContent,
+    ) : ToolsPostData
+}
+----
+
+A payload typed `EndpointFile` makes a _file part_.
+Any other type makes a _value part_, and needs a `Stringer` exactly as a query parameter does (see xref:stringers.adoc[]), resolved from the endpoint function, then the part type, then outward through the declaring service.
+
+A part's name on the wire is the subclass's own name with a lowercase first letter — `file`, `from` — or ``@Endpoint.MultipartFormData.Part``'s `name` argument when you give one, as `With` does to arrive as `article`.
+
+Its `presence` argument fixes how many times the part may occur, and drives both ends:
+
+[cols="1,1,1,2"]
+|===
+| `PartPresence` | Occurrences | Sending | Receiving
+
+| `Required` _(default)_
+| Exactly one
+| `p: T`
+| `400` when absent, and on a second one
+
+| `Optional`
+| Zero or one
+| `p: T? = null`
+| `400` on a second one
+
+| `RepeatedRequired`
+| One or more
+| `p: List<T>`
+| `400` when absent
+
+| `RepeatedOptional`
+| Zero or more
+| `p: List<T> = emptyList()`
+| never rejected on count
+|===
+
+
+== The endpoint
+
+A multipart endpoint takes one `Multipart<T>` parameter where an ordinary body would go — first, unannotated, on a `post`, `put` or `patch`.
+It replaces the body rather than joining it: an endpoint has one or the other, never both.
+
+[source,kotlin]
+.MPService.kt
+----
+@Endpoint.Service
+interface MPService : EndpointService {
+    suspend fun Tools.post(parts: Multipart<ToolsPostData>): Either<Unit, NoFail>
+}
+----
+
+
+== Sending one
+
+The client processor generates a builder on your `@ClientEndpointServiceFactory` object, named `multipart` followed by the part type's name, with one parameter per part shaped by its presence:
+
+[source,kotlin]
+.main.kt
+----
+APIServices.mp(client).call {
+    Tools().post(
+        APIServices.multipartToolsPostData(
+            file = EndpointFile(fileName = "foo.txt", fileSize = 8, source = { source }),
+            from = Uuid.random(),
+            with = listOf(ArticleContent("Yay", "Salomon", "This is cool!")),
+        )
+    )
+}
+----
+
+One builder is generated per object, however many of its services use that part type.
+Two different factory objects each get their own.
+
+
+== Receiving one
+
+`forEachPart` is how a server reads the parts.
+The `when` over the sealed part type is exhaustive, so adding a part later makes every handler stop compiling until it is dealt with:
+
+[source,kotlin]
+.ServerMPService.kt
+----
+override suspend fun Tools.post(parts: Multipart<ToolsPostData>): Either<Unit, NoFail> {
+    var file: String? = null
+    var from: Uuid? = null
+    val articles = mutableListOf<ArticleContent>()
+
+    parts.forEachPart { part ->
+        when (part) {
+            // Read now: the file is only valid inside this handler.
+            is ToolsPostData.File -> file = part.file.source().use { it.readString() }
+            is ToolsPostData.From -> from = part.from
+            is ToolsPostData.With -> articles += part.content
+        }
+    }
+
+    return Either.unit()
+}
+----
+
+A part the peer sends that the part type never declared is a `400`, as is one that breaks its declared `presence`.
+
+
+== Part lifetime
+
+A multipart body is a single-pass stream, and each part is released as soon as its handler returns.
+
+NOTE: An ``EndpointFile``'s content is only valid *inside* the handler that received it.
+Read what you need while you are still in the loop, by copying the bytes out or streaming them straight to their destination.
+Keeping the `EndpointFile` and reading it after `forEachPart` has moved on throws `IllegalStateException`, because the buffer it would read from is gone.
+
+The same one-pass rule holds on the client: a `Multipart<T>` you build is consumed as the request body is written, so build a fresh one per call rather than reusing one.

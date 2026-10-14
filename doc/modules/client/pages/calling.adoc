@@ -1,0 +1,40 @@
+= Calling an endpoint
+
+A call runs one endpoint through a `ServiceCaller`.
+This page covers `call`, and how to customize the request it sends.
+
+
+== Calling
+
+[source,kotlin]
+.main.kt
+----
+val result = APIServices.articles(client).call {
+    Articles().New().create(ArticleContent(title = "Foo", author = "Me", content = "Bar"))
+}
+----
+
+The `call { }` block runs with the service as its receiver, so every resource factory and endpoint method is in scope directly.
+
+It calls exactly one endpoint method.
+Building resources is free — only the endpoint call itself counts — but a block calling two of them fails, so call twice instead.
+
+The result is a `CallStatus.Result` (see xref:call-status.adoc[]).
+
+
+== Customizing a request
+
+`call` has a second form for the calls that need it, taking the request customization — headers, authentication, anything else ktor's `HttpRequestBuilder` exposes — as an extra block, applied to that one call only:
+
+[source,kotlin]
+.main.kt
+----
+val result = APIServices.tools(client).call({ Tools().Headers().get() }) {
+    headers {
+        append("X-Nomi-Demo", "Yay!")
+    }
+}
+----
+
+The endpoint call itself moves inside the parentheses here.
+Kotlin's trailing-lambda syntax always binds to the *last* parameter, which is the request customization, not the call.

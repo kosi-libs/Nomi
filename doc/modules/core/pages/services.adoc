@@ -1,0 +1,102 @@
+= Services and endpoints
+
+A service groups the endpoints of an API.
+This page covers how an endpoint is declared, how its method, body and query parameters are chosen, and how endpoints are shared between services.
+
+
+== The service interface
+
+A service is an interface annotated `@Endpoint.Service`, extending the `EndpointService` marker.
+Each of its `suspend` functions, extending a resource interface, is one endpoint:
+
+[source,kotlin]
+.ArticlesService.kt
+----
+@Endpoint.Service
+interface ArticlesService : EndpointService {
+    suspend fun Articles.get(@Endpoint.Query page: Int? = null): Either<List<ArticleSummary>?, NoFail>
+    @Endpoint(Endpoint.Method.Post)
+    suspend fun Articles.New.create(content: ArticleContent): Either<Uuid, ArticleCreationFailure>
+    suspend fun Article.get(): Either<ArticleContent, NoFail>
+    suspend fun Article.delete(): Either<Unit, NoFail>
+    suspend fun Article.Comments.get(@Endpoint.Query page: Int? = null): Either<List<ArticleComment>?, NoFail>
+    suspend fun Article.Comments.post(comment: ArticleComment): Either<Unit, ArticleCommentFailure>
+}
+----
+
+This resolves to:
+
+----
+GET    /articles?page
+POST   /articles/new
+GET    /article/{articleId}
+DELETE /article/{articleId}
+GET    /article/{articleId}/comments?page
+POST   /article/{articleId}/comments
+----
+
+
+[#the-http-method]
+== The HTTP method
+
+Name the function `get`, `post`, `put`, `patch` or `delete` and that name is the method.
+Annotate it with `@Endpoint(Endpoint.Method.Post)`, or any other `Method`, and the annotation wins instead.
+The function can then be named anything, as `create` is above.
+
+
+[#the-request-body]
+== The request body
+
+The request body is the first parameter, when it carries no `@Endpoint.Query` — `content` in `Articles.New.create` above.
+Only `post`, `put` and `patch` endpoints may declare one.
+
+That one parameter can instead be a `Multipart<T>`, for a `multipart/form-data` body (see xref:multipart.adoc[]), or an `EndpointBinary`, for a raw streamed one (see xref:streaming-body.adoc[]).
+An endpoint has exactly one of the three, never two.
+
+
+[#query-parameters]
+== Query parameters
+
+A query parameter is any other parameter, annotated `@Endpoint.Query`.
+
+A *nullable* one is optional: `null` when absent, omitted from the URL entirely when its value is `null`, and free to carry any default.
+That default applies purely at the call site.
+
+A *non-nullable* one is required: the server answers `400 Bad Request` when it is missing.
+
+`@Endpoint.Query("p")` gives it a different name on the wire than in code.
+
+[cols="2,2"]
+|===
+| Declaration | Route
+
+| `suspend fun Res.get(): Either<V, NoFail>`
+| `GET` on ``Res``'s own path.
+
+| `@Endpoint(Endpoint.Method.Post) suspend fun Res.create(body: T): Either<V, E>`
+| `POST`, with `body` as the request body.
+
+| `suspend fun Res.get(@Endpoint.Query page: Int? = null): Either<V, NoFail>`
+| `GET`, with `page` as an optional query parameter.
+
+| `suspend fun Res.get(@Endpoint.Query("p") page: Int): Either<V, NoFail>`
+| `GET`, with a *required* query parameter named `p` on the wire.
+|===
+
+
+== The return type
+
+An endpoint always returns `Either<V, E>` (see xref:either.adoc[]): `V` is the success value (`Unit` for none), `E` the business failure (`NoFail` for none).
+
+`V` and `E` must be different types.
+`Either` stores one value and tells success from failure by checking which type it is an instance of, so an overlap between the two would make a failure indistinguishable from a value at runtime.
+
+`V` may be `Unit`, or nullable, and either case answers `204 No Content`.
+A nullable list can signal "page out of range" without a business failure, for instance.
+
+
+== Sharing endpoints across services
+
+A service's endpoints are the union of its own and every `@Endpoint.Service` interface it extends, however deep.
+A member-less base interface is the idiomatic place to hang a project-wide `@Endpoint.UseStringer` shared by several services (see xref:stringers.adoc#registering[]).
+It can declare zero endpoints of its own.

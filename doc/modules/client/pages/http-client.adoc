@@ -1,0 +1,42 @@
+= Configuring the HttpClient
+
+Nomi does not create or configure the client.
+This page covers the three things the application sets up on it, and what happens when one is missing.
+
+[source,kotlin]
+.main.kt
+----
+val client = HttpClient {
+    install(ContentNegotiation) {
+        json(SharedJson)
+    }
+    defaultRequest {
+        url("https://api.example.com/")
+        contentType(ContentType.Application.Json)
+    }
+}
+----
+
+* **`ContentNegotiation`, matching the server's format.**
+Without it a request with a body fails while being prepared, and a response body fails to be read.
+* **A base URL, in `defaultRequest`, ending in a slash if it carries a path.**
+This is ordinary URL resolution: `https://api.example.com/v1` treats `v1` as a resource to be replaced, silently dropping it, whereas `https://api.example.com/v1/` keeps it.
+* **A `Content-Type`, in `defaultRequest`.**
+`ContentNegotiation` picks its converter from the request's content type; without one, every `post`, `put` and `patch` fails before reaching the network.
+
+
+== Mistakes
+
+Get any of this wrong and a call *throws* rather than returning a `CallStatus`.
+A misconfigured client is a programming error, not a call outcome.
+
+[cols="2,2"]
+|===
+| Mistake | What is raised
+
+| No `ContentNegotiation`, or no `Content-Type`, on a request with a body
+| `IllegalStateException`, from ktor.
+
+| No `ContentNegotiation`, or a format the response does not match, when reading a response body
+| `NoTransformationFoundException`, from ktor.
+|===

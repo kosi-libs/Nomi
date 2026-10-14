@@ -1,0 +1,71 @@
+= OpenAPI
+
+The generated routes can describe themselves, so that ktor assembles an OpenAPI document from the routing tree.
+This page covers how to enable it, what is described, and how to serve it.
+
+
+== Enabling it
+
+Set `withOpenApiSpecs`:
+
+[source,kotlin]
+.ServerArticlesService.kt
+----
+@ServerEndpointService("articles", withOpenApiSpecs = true)
+class ServerArticlesService : ArticlesService {
+    /** Lists the articles, newest first. */
+    override suspend fun Articles.get(page: Int?): Either<List<ArticleSummary>?, NoFail> { ... }
+}
+----
+
+Nomi describes what it already knows, which is everything a route cannot show by itself.
+That is each path and query parameter with its wire type and whether it is required, the request body — JSON, raw binary, or a `multipart/form-data` object schema with one property per part — and every status code the endpoint can answer.
+
+The responses follow the xref:core:wire-protocol.adoc[] exactly:
+
+* `200` with the success schema;
+* `204` where the success is `Unit` or nullable;
+* `422` with the error schema, *omitted* when the error type is `NoFail`, since such an endpoint has no business failure;
+* `400` where a parameter can fail to decode.
+
+
+== Descriptions
+
+A doc comment on the endpoint becomes its summary and description.
+
+TIP: Write it on the *implementation*, not on the service interface.
+KDoc does not survive into class files, so an interface declared in another module — the usual arrangement, since the client shares it — has none left to read by the time the server processor runs.
+
+
+== Serving the document
+
+Nomi attaches the metadata; serving it is ktor's side.
+Point Swagger UI at the routing tree:
+
+[source,kotlin]
+.main.kt
+----
+routing {
+    swaggerUI("/swagger") {
+        source = OpenApiDocSource.Routing()
+    }
+    articles(ServerArticlesService())
+}
+----
+
+That needs `io.ktor:ktor-server-swagger` on the server's classpath.
+
+
+== Hiding an endpoint
+
+To leave one endpoint out of the document while still serving it, annotate its override:
+
+[source,kotlin]
+----
+@ServerEndpointService.HideFromOpenApi
+override suspend fun Tools.Health.get(): Either<Unit, NoFail> = Either.unit()
+----
+
+NOTE: `describe` and `hide` are ktor's own experimental API, so the generated code opts in to `@ExperimentalKtorApi` — but only for a service that asked for specs.
+A `Stringer`-encoded path or query parameter is documented as the string it really is on the wire, without a `format`.
+A streamed `EndpointBinary` is `application/octet-stream`, since its real content type is chosen per call and there is nothing static to document.

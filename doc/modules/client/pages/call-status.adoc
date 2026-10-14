@@ -1,0 +1,44 @@
+= CallStatus
+
+`call { }` returns a `CallStatus.Result`, which tells apart every way a call can end.
+This page covers its cases and the functions that read them.
+
+[cols="1,3"]
+|===
+| Case | Meaning
+
+| `Success(value)`
+| The endpoint answered `200`/`204`.
+
+| `CallFailure(error)`
+| The endpoint answered `422` with a business failure.
+
+| `ServerFailure(code, body)`
+| The server answered any other non-success status.
+
+| `NetworkFailure(message, cause)`
+| The request never reached the server.
+|===
+
+`CallStatus` additionally carries a `Loading` state, so the same type also models a call still in flight in a UI (see xref:flows.adoc[]).
+
+Two kinds of throwable are deliberately *not* folded into a result.
+A `CancellationException` raised mid-call propagates unchanged, so cancelling the caller's scope still cancels it.
+The client-misconfiguration exceptions of xref:http-client.adoc[] propagate too, since retrying or handling them as a `NetworkFailure` would never fix what is actually wrong.
+
+
+== Reading one
+
+[cols="1,3"]
+|===
+| Function | Behaviour
+
+| `successOrNull()`
+| The success value, or `null` for anything else.
+
+| `mapSuccess { }` / `mapFailure { }`
+| Transforms the success/failure payload, passing every other case through unchanged.
+
+| `fakeSuccess()` / `fakeFailure()` / `fake()`
+| Widens a `CallStatus` known never to hold one side (typically after a `NoFail` check) to a broader type — a variance escape hatch, not a runtime check.
+|===

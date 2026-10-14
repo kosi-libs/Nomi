@@ -1,0 +1,133 @@
+= Setup
+
+Nomi ships six artifacts:
+
+[cols="2,3"]
+|===
+| Artifact | Purpose
+
+| `org.kodein.rest.nomi:nomi-runtime-shared`
+| `Either`, `Error`/`NoFail`, `Stringer`, and the `@Endpoint.*` annotations.
+A normal dependency.
+
+| `org.kodein.rest.nomi:nomi-runtime-client`
+| `ServiceCaller`, `CallStatus`, and the helpers the generated client calls.
+A normal dependency.
+
+| `org.kodein.rest.nomi:nomi-runtime-server`
+| `httpError`, `routingCall`, and the helpers the generated routes call (ktor-server, JVM only).
+
+| `org.kodein.rest.nomi:nomi-processor-shared`
+| Needed by any module that declares a `@Endpoint.Resource`.
+
+| `org.kodein.rest.nomi:nomi-processor-server`
+| Turns a `@ServerEndpointService` class into ktor routes.
+
+| `org.kodein.rest.nomi:nomi-processor-client`
+| Turns a `@ClientEndpointServiceFactory` object into a `ServiceCaller`.
+|===
+
+IMPORTANT: Nomi runs on KSP but does not install it in your project.
+The KSP version to use depends on the Kotlin version you are using, so it is your responsibility to apply it alongside Nomi, with a KSP version that matches your Kotlin version.
+
+
+== The shared module
+
+Resources and services are declared in `commonMain`.
+Run `nomi-processor-shared` once, over the common metadata source set, and feed its output back into `commonMain`:
+
+[source,kotlin,subs="verbatim,attributes"]
+.build.gradle.kts
+----
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompilationTask
+
+plugins {
+    kotlin("multiplatform")
+    id("com.google.devtools.ksp") // <1>
+}
+
+kotlin {
+    jvm()
+    iosArm64()
+    // ...your targets
+
+    sourceSets {
+        commonMain {
+            kotlin.srcDir(layout.buildDirectory.dir("generated/ksp/metadata/commonMain/kotlin")) // <2>
+            dependencies {
+                implementation("org.kodein.rest.nomi:nomi-runtime-shared:{version}") // <3>
+            }
+        }
+    }
+}
+
+dependencies {
+    add("kspCommonMainMetadata", "org.kodein.rest.nomi:nomi-processor-shared:{version}") // <4>
+}
+
+tasks.matching { it.name != "kspCommonMainKotlinMetadata" }.configureEach { // <5>
+    if (name.startsWith("ksp") || this is KotlinCompilationTask<*>) {
+        dependsOn("kspCommonMainKotlinMetadata")
+    }
+}
+----
+<1> Adds the KSP plugin, which hosts the Nomi processors.
+<2> Adds the KSP-generated common sources to `commonMain`.
+KSP already registers this directory as an output, but IntelliJ only indexes it as source code if it is also declared here explicitly.
+<3> The Nomi shared runtime: annotations, `Either`, `Stringer`.
+<4> Runs the shared processor over the common metadata source set, once, so a single set of resource implementations is generated for `commonMain` rather than one per target.
+<5> Every compilation, and every per-target KSP task (which also reads `commonMain` as part of its merged source set even though it has no processor registered), consumes the KSP-generated `commonMain` sources, so all of them must wait for KSP to run.
+
+
+== The server module
+
+A JVM module depending on the shared module, implementing its services:
+
+[source,kotlin,subs="verbatim,attributes"]
+.build.gradle.kts
+----
+plugins {
+    kotlin("jvm")
+    id("com.google.devtools.ksp")
+}
+
+dependencies {
+    implementation(project(":shared")) // <1>
+    implementation("org.kodein.rest.nomi:nomi-runtime-server:{version}")
+    ksp("org.kodein.rest.nomi:nomi-processor-server:{version}") // <2>
+}
+----
+<1> Your shared module, and the Nomi server runtime: `httpError`, `routingCall`.
+<2> Runs the Nomi server processor.
+KSP wires its generated output into the compilation and IntelliJ's index automatically here, as there is no common metadata source set on a JVM module.
+
+
+== The client module
+
+A multiplatform module depending on the shared module, wired exactly like the shared module itself — its own `kotlin.srcDir` and `tasks.matching` block — but with the client runtime and processor:
+
+[source,kotlin,subs="verbatim,attributes"]
+.build.gradle.kts
+----
+kotlin {
+    sourceSets {
+        commonMain {
+            kotlin.srcDir(layout.buildDirectory.dir("generated/ksp/metadata/commonMain/kotlin"))
+            dependencies {
+                implementation(project(":shared"))
+                implementation("org.kodein.rest.nomi:nomi-runtime-client:{version}")
+            }
+        }
+    }
+}
+
+dependencies {
+    add("kspCommonMainMetadata", "org.kodein.rest.nomi:nomi-processor-client:{version}")
+}
+----
+
+
+== Kotlin version
+
+Every generated factory and `ServiceCaller.call` use Kotlin context parameters.
+Nomi is built against Kotlin {kotlin-version} with no extra compiler flag, so any Kotlin version where context parameters are available without an opt-in flag works to consume Nomi.

@@ -1,0 +1,83 @@
+= Nomi
+
+[.lead]
+Compile-time REST for Kotlin Multiplatform — declare your API once, get both sides.
+
+Nomi turns plain Kotlin interfaces into a working REST API.
+You declare _resources_ — nested interfaces that are your routes — and _services_ — interfaces whose `suspend` functions are your endpoints.
+A KSP processor generates a ktor server implementation from them; another generates a typed ktor client.
+
+[source,kotlin]
+.endpoints.kt
+----
+@Endpoint.Resource
+interface Articles {
+    @Endpoint.Resource interface New : Articles
+}
+
+@Endpoint.Resource
+interface Article {
+    val articleId: Uuid
+}
+
+@Endpoint.Service
+interface ArticlesService : EndpointService {
+    suspend fun Articles.get(@Endpoint.Query page: Int? = null): Either<List<ArticleSummary>?, NoFail>
+    @Endpoint(Endpoint.Method.Post)
+    suspend fun Articles.New.create(content: ArticleContent): Either<Uuid, ArticleCreationFailure>
+    suspend fun Article.get(): Either<ArticleContent, NoFail>
+}
+----
+
+[source,kotlin]
+.main.kt
+----
+@ClientEndpointServiceFactory(ArticlesService::class, "articles")
+object APIServices
+
+// Thanks to @ClientEndpointServiceFactory
+val result = APIServices.articles(client).call {
+    Articles().New().create(ArticleContent(title = "Foo", author = "Me", content = "Bar"))
+}
+----
+
+No reflection, no runtime route table, no hand-written URLs on either side.
+
+
+== Why Nomi
+
+One declaration, both sides::
+The resource and service interfaces in `commonMain` are the only place the API is written down.
+The server's routes and the client's implementation are both generated from them, so a server and a client built against the same declaration can never disagree about a path, a method, or a type.
+
+A route is a type, not a string::
+Nesting `@Endpoint.Resource` interfaces _is_ the path structure — `Article.Comments` is a route because it is declared inside `Article`.
+A path parameter is a `val` on the interface that owns it, not a placeholder you match against a string later.
+
+Business failures are in the return type::
+Every endpoint returns `Either<V, E>`.
+The server answers a failure with `Either.error(...)`; the client receives it back as `CallStatus.CallFailure(error)`, typed as the very same `E`.
+No exception crosses the wire for a business outcome — only for things that are actually exceptional.
+
+Everything is checked before anything is generated::
+A processor validates every declaration it reads — including ones from a dependency module — and generates nothing at all for a round in which anything it needs is invalid.
+There is no partial output and no runtime "route not found".
+
+The API documents itself::
+Set `withOpenApiSpecs` and the generated routes describe themselves, so ktor serves an OpenAPI document straight from the routing tree.
+
+Serialization stays yours::
+Nomi defines the _shape_ of a call — method, path, query parameters, status code, whether a body is present — and nothing about the _format_ of that body.
+It hands the value to ktor's `ContentNegotiation` and lets it serialize.
+
+Multiplatform client, JVM server::
+Resources and services live in a `commonMain` shared between every target.
+The generated client runs on all of them; the generated server runs on ktor-server, which is JVM-only.
+
+
+== How to read this documentation
+
+* xref:getting-started.adoc[] gets a first call working in a few minutes.
+* The *Core* section explains resources, services, `Either`, stringers, multipart and the wire protocol, which both sides share.
+* The *Server* and *Client* sections cover each generated side.
+* The *Guides* section covers the demo, the supported platforms and visibility.

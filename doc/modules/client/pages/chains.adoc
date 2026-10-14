@@ -1,0 +1,71 @@
+= Chains
+
+`callChainFlow { }` runs several calls as one unit.
+This page covers how links are started, how a chain fails, and how it stays concurrent or sequential.
+
+The whole chain emits one `Loading` and then a single `CallStatus.Result`, whichever call it ends up coming from.
+
+
+== Links
+
+Inside the block, `link { }` starts a call and hands back its success value as a `Deferred`:
+
+[source,kotlin]
+.main.kt
+----
+sealed interface FailedCAAPC : Error {
+    data class FailedArticleCreation(val error: ArticleCreationFailure) : FailedCAAPC
+    data class FailedCommentPost(val error: ArticleCommentPostFailure) : FailedCAAPC
+}
+
+suspend fun createArticleAndPostComment(
+    articles: ServiceCaller<ArticlesService>,
+): Flow<CallStatus<Unit, FailedCAAPC>> =
+    callChainFlow {
+        val id = link {
+            articles
+                .call { Articles().New().create(ArticleContent(title = "Foo", author = "Me", content = "Bar")) }
+                .mapFailure { FailedCAAPC.FailedArticleCreation(it) } // <1>
+        }
+
+        articles
+            .call { Article(id.await()).Comments().post(ArticleComment(author = "Me", content = "Hello World!")) }
+            .mapFailure { FailedCAAPC.FailedCommentPost(it) }
+    }
+----
+<1> Every call in a chain reports the same failure type, so each one's own `E` is mapped into it.
+This is what makes the chain's result a single type a caller can act on.
+
+
+== Failing
+
+The block's own return value is the chain's result when every link succeeded.
+Otherwise the *first link to fail* is the result, with its failure reported as-is:
+
+* A failed link's `Deferred` never completes, so an `await()` on it never resumes.
+The chain is cancelled around it instead, which is why the block after that point does not run.
+* That cancellation stays inside the chain.
+The collector's scope is untouched: a failed chain emits a `Failure` rather than cancelling its caller.
+* The links are cancelled too, so a chain never leaves a call in flight behind it.
+
+
+== Concurrency
+
+Links run in the chain's own scope, so every link started before the first `await()` runs *concurrently*.
+A chain is only sequential where you make it sequential by awaiting:
+
+[source,kotlin]
+----
+callChainFlow {
+    val summaries = link { articles.call { Articles().get(page = 1) } }   // <1>
+    val content = link { articles.call { Article(knownId).get() } }       // <1>
+    CallStatus.Success(summaries.await() to content.await())              // <2>
+}
+----
+<1> Both calls are already in flight here.
+<2> Awaited only once both are needed — either failing ends the chain.
+
+`callChain { }` is the same builder without the `Flow`, returning the `CallStatus.Result` directly, and `linkChain { }` nests a whole chain inside one link of an outer chain.
+
+NOTE: `callChainFlow` is itself a `suspend` function, so it is called from a coroutine even though, being cold, it runs nothing until collected.
+`callFlow` and `flow` are not.

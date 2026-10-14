@@ -1,0 +1,58 @@
+= Streaming a request body
+
+An `EndpointBinary` body parameter means the request body *is* that binary's content, streamed — no serialization, no `ContentNegotiation`.
+This page covers how to send and receive one.
+
+
+== The endpoint
+
+[source,kotlin]
+.FilesService.kt
+----
+@Endpoint.Service
+interface FilesService : EndpointService {
+    @Endpoint(Endpoint.Method.Put)
+    suspend fun Files.put(`data`: EndpointBinary): Either<Unit, NoFail>
+}
+----
+
+
+== Sending one
+
+The client announces the binary's own content type, and its size as `Content-Length` when it knows one:
+
+[source,kotlin]
+.main.kt
+----
+APIServices.files(client).call {
+    Files().put(
+        EndpointBinary(
+            size = 9,
+            contentType = ContentType.Text.Plain,
+            source = { packet },
+        )
+    )
+}
+----
+
+Leave `size` `null` when the length is not known up front, and the request goes out `Transfer-Encoding: chunked`.
+
+
+== Receiving one
+
+Server-side, the endpoint receives an `EndpointBinary` built from the request, with `contentType` and `size` taken from its headers.
+`size` is `null` for a chunked request, whose length is genuinely unknown until it ends.
+
+NOTE: A received body is single-pass, and valid only *inside* the endpoint.
+Opening its `source()` twice throws, and so does reading it after the endpoint has returned, because the server has recycled the connection by then.
+Read what you need while you are still in the endpoint.
+
+
+== Binary versus file
+
+``EndpointBinary`` and ``EndpointFile`` are not interchangeable, and Nomi says so rather than letting either fail at runtime.
+
+* An `EndpointFile` is one part of a multipart body and carries a file name, so it is rejected as a whole body, and as a success type.
+* An `EndpointBinary` is a whole body, so it is rejected as a part payload.
+
+An `EndpointBinary` travels either way: as a parameter it is the request body, as the success type it is the response body (see xref:client:streaming-response.adoc[]).
