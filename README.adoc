@@ -5,6 +5,7 @@
 :idseparator: -
 :icons: font
 :source-highlighter: highlight.js
+:version: 0.1.0
 
 [.lead]
 Compile-time REST for Kotlin Multiplatform — declare your API once, get both sides.
@@ -129,7 +130,7 @@ Resources and services are declared in `commonMain`.
 Run `nomi-processor-shared` once, over the common metadata source set, and feed its output back into `commonMain`:
 
 .build.gradle.kts
-[source,kotlin]
+[source,kotlin,subs="verbatim,attributes"]
 ----
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompilationTask
 
@@ -151,7 +152,7 @@ kotlin {
             kotlin.srcDir(layout.buildDirectory.dir("generated/ksp/metadata/commonMain/kotlin"))
             dependencies {
                 // The Nomi shared runtime: annotations, Either, Stringer. A normal dependency.
-                implementation("org.kodein.rest.nomi:nomi-runtime-shared:0.1.0")
+                implementation("org.kodein.rest.nomi:nomi-runtime-shared:{version}")
             }
         }
     }
@@ -160,7 +161,7 @@ kotlin {
 dependencies {
     // Run the Nomi shared processor over the common metadata source set, once, so a single set
     // of resource implementations is generated for commonMain rather than one per target.
-    add("kspCommonMainMetadata", "org.kodein.rest.nomi:nomi-processor-shared:0.1.0")
+    add("kspCommonMainMetadata", "org.kodein.rest.nomi:nomi-processor-shared:{version}")
 }
 
 // Every compilation - and every per-target KSP task, which also reads commonMain as part of its
@@ -179,7 +180,7 @@ tasks.matching { it.name != "kspCommonMainKotlinMetadata" }.configureEach {
 A JVM module depending on the shared module, implementing its services:
 
 .build.gradle.kts
-[source,kotlin]
+[source,kotlin,subs="verbatim,attributes"]
 ----
 plugins {
     kotlin("jvm")
@@ -189,10 +190,10 @@ plugins {
 dependencies {
     // Your shared module, and the Nomi server runtime: httpError, routingCall.
     implementation(project(":shared"))
-    implementation("org.kodein.rest.nomi:nomi-runtime-server:0.1.0")
+    implementation("org.kodein.rest.nomi:nomi-runtime-server:{version}")
     // Run the Nomi server processor. KSP wires its generated output into the compilation and
     // IntelliJ's index automatically here - there's no common metadata source set on a JVM module.
-    ksp("org.kodein.rest.nomi:nomi-processor-server:0.1.0")
+    ksp("org.kodein.rest.nomi:nomi-processor-server:{version}")
 }
 ----
 
@@ -202,7 +203,7 @@ dependencies {
 A multiplatform module depending on the shared module, wired exactly like the shared module itself — its own `kotlin.srcDir` and `tasks.matching` block — but with the client runtime and processor:
 
 .build.gradle.kts
-[source,kotlin]
+[source,kotlin,subs="verbatim,attributes"]
 ----
 kotlin {
     sourceSets {
@@ -210,14 +211,14 @@ kotlin {
             kotlin.srcDir(layout.buildDirectory.dir("generated/ksp/metadata/commonMain/kotlin"))
             dependencies {
                 implementation(project(":shared"))
-                implementation("org.kodein.rest.nomi:nomi-runtime-client:0.1.0")
+                implementation("org.kodein.rest.nomi:nomi-runtime-client:{version}")
             }
         }
     }
 }
 
 dependencies {
-    add("kspCommonMainMetadata", "org.kodein.rest.nomi:nomi-processor-client:0.1.0")
+    add("kspCommonMainMetadata", "org.kodein.rest.nomi:nomi-processor-client:{version}")
 }
 ----
 
